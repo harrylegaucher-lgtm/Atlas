@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#262A22">
+<title>Atlas — a museum of your drawings</title>
+<style>
+  :root{
+    --paper:#EAE7DA;
+    --paper-dark:#DCD8C7;
+    --paper-darker:#CFCBB8;
+    --ink:#262A22;
+    --ink-soft:#5B5E50;
+    --brass:#B07C22;
+    --brass-dark:#8C6019;
+    --sage:#4E6E56;
+    --sage-dark:#3B5641;
+    --rust:#A8412B;
+    --line:rgba(38,42,34,0.16);
+    --line-strong:rgba(38,42,34,0.30);
+    --accent: var(--brass);
+    --accent-dark: var(--brass-dark);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  html{ overscroll-behavior:none; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper-darker);
+    color:var(--ink);
+    overflow:hidden;
+    position:fixed;
+    inset:0;
+    overscroll-behavior:none;
+    touch-action:none;
+    -webkit-user-select:none;
+    user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  input, textarea{
+    -webkit-user-select:text;
+    user-select:text;
+    -webkit-touch-callout:default;
+    touch-action:manipulation;
+    font-size:16px; /* prevents iOS Safari auto-zoom on focus */
+  }
+  button{ touch-action:manipulation; }
+  #app{height:100%;display:flex;flex-direction:column;}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;align-items:center;gap:24px;
+    padding:10px 18px;
+    padding-top:max(10px, env(safe-area-inset-top));
+    padding-left:max(18px, env(safe-area-inset-left));
+    padding-right:max(18px, env(safe-area-inset-right));
+    background:var(--ink);
+    color:var(--paper);
+    flex:0 0 auto;
+    z-index:20;
+    border-bottom:2px solid var(--ink);
+  }
+  .brand{
+    font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    font-size:20px;letter-spacing:0.3px;font-weight:600;
+    display:flex;align-items:baseline;gap:9px;
+  }
+  .brand small{font-family:inherit;font-weight:400;font-size:12px;color:#B9B6A6;letter-spacing:0.2px;}
+  nav.tabs{display:flex;gap:2px;margin-left:8px;}
+  nav.tabs button{
+    appearance:none;border:none;background:transparent;color:#C9C6B6;
+    font-size:14px;font-weight:600;padding:9px 16px;cursor:pointer;
+    border-radius:7px 7px 0 0;position:relative;top:2px;
+    font-family:Georgia,"Iowan Old Style",serif;
+  }
+  nav.tabs button.active{background:var(--paper);color:var(--ink);}
+  nav.tabs button:not(.active):hover{color:#fff;background:rgba(255,255,255,0.06);}
+  .headSpacer{flex:1;}
+  .toast{
+    font-size:12.5px;color:#D8D5C4;opacity:0;transition:opacity .25s;
+  }
+  .toast.show{opacity:1;}
+
+  /* ---------- main layout ---------- */
+  main{flex:1;min-height:0;position:relative;}
+  .view{position:absolute;inset:0;display:grid;grid-template-columns:58px 1fr 300px;}
+  .view.hidden{display:none;}
+
+  /* ---------- left toolbar ---------- */
+  .toolbar{
+    background:var(--paper-dark);
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;
+    padding:12px 0;gap:10px;overflow-y:auto;touch-action:pan-y;
+  }
+  .tool-btn{
+    width:38px;height:38px;border-radius:9px;border:1px solid transparent;
+    background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-soft);position:relative;
+  }
+  .tool-btn:hover{background:var(--paper-darker);}
+  .tool-btn.active{background:var(--ink);color:var(--paper);}
+  .tool-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .tool-sep{width:28px;height:1px;background:var(--line-strong);margin:2px 0;}
+  .swatches{display:flex;flex-direction:column;gap:6px;}
+  .swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;}
+  .swatch.active{border-color:var(--ink);}
+  input[type=color].swatch-custom{width:22px;height:22px;padding:0;border:2px solid var(--line-strong);border-radius:50%;overflow:hidden;background:none;cursor:pointer;}
+  .size-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .size-dot{border-radius:50%;background:var(--ink);}
+  input[type=range]{
+    writing-mode:vertical-lr;direction:rtl;
+    -webkit-appearance:slider-vertical;
+    width:20px;height:70px;accent-color:var(--ink);
+  }
+  .zoom-lbl{font-size:10px;color:var(--ink-soft);text-align:center;line-height:1.3;}
+
+  /* ---------- canvas ---------- */
+  .canvasWrap{position:relative;background:var(--paper);overflow:hidden;background-image:radial-gradient(circle,rgba(38,42,34,0.05) 1px, transparent 1px);background-size:22px 22px;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;}
+  canvas.tool-pan{cursor:grab;}
+  canvas.tool-select{cursor:default;}
+  canvas.panning{cursor:grabbing;}
+  .hint{
+    position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+    font-size:12px;color:var(--ink-soft);background:rgba(234,231,218,0.85);
+    padding:6px 12px;border-radius:14px;border:1px solid var(--line);
+    pointer-events:none;transition:opacity .3s;
+  }
+
+  /* ---------- right sidebar ---------- */
+  .sidebar{
+    background:var(--paper-dark);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;touch-action:pan-y;
+  }
+  .nameRow{padding:14px 14px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px;}
+  .nameRow input[type=text]{
+    font-family:Georgia,"Iowan Old Style",serif;font-size:16px;
+    border:none;border-bottom:1px solid var(--line-strong);background:transparent;
+    padding:4px 2px;color:var(--ink);
+  }
+  .nameRow input[type=text]:focus{outline:none;border-bottom-color:var(--ink);}
+  .versionRow{display:none;flex-wrap:wrap;gap:5px;align-items:center;}
+  .versionRow .vLabel{font-size:10.5px;color:var(--ink-soft);margin-right:2px;}
+  .verChip{
+    width:24px;height:24px;border-radius:50%;border:1px solid var(--line-strong);
+    background:var(--paper);color:var(--ink-soft);font-size:11px;font-weight:700;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+    font-family:inherit;
+  }
+  .verChip:hover{border-color:var(--ink);}
+  .verChip.active{background:var(--accent);border-color:var(--accent-dark);color:#fff;}
+  .verChip.latest:not(.active)::after{content:'';}
+  .verChip.latest{box-shadow:0 0 0 2px rgba(176,124,34,0.18);}
+  .rowBtns{display:flex;gap:8px;}
+  .btn{
+    font-size:13px;font-weight:600;border:1px solid var(--line-strong);border-radius:7px;
+    background:var(--paper);color:var(--ink);padding:8px 12px;cursor:pointer;flex:1;
+    font-family:inherit;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent-dark);color:#fff;}
+  .btn.primary:hover{background:var(--accent-dark);}
+  .btn.ghost{background:transparent;}
+  .btn:hover{filter:brightness(0.97);}
+  .btn:active{transform:translateY(1px);}
+
+  .subsection{display:flex;flex-direction:column;min-height:0;flex:1;border-top:1px solid var(--line);}
+  .subsection h3{
+    margin:0;padding:10px 14px 6px;font-size:11px;letter-spacing:0.4px;
+    color:var(--ink-soft);font-weight:600;text-transform:none;
+  }
+  .searchRow{padding:0 14px 8px;}
+  .searchRow input{
+    width:100%;padding:7px 10px;border:1px solid var(--line-strong);border-radius:7px;
+    background:var(--paper);font-size:16px;color:var(--ink);font-family:inherit;
+  }
+  .searchRow input:focus{outline:none;border-color:var(--ink);}
+  .list{flex:1;overflow-y:auto;padding:4px 12px 14px;touch-action:pan-y;-webkit-overflow-scrolling:touch;}
+  .cardTile{
+    display:flex;gap:10px;align-items:center;padding:7px 8px;border-radius:9px;
+    cursor:pointer;margin-bottom:4px;border:1px solid transparent;position:relative;
+  }
+  .cardTile:hover{background:var(--paper-darker);}
+  .cardTile.active{background:var(--paper);border-color:var(--line-strong);}
+  .cardTile .thumb{
+    width:40px;height:40px;border-radius:6px;background:var(--paper);border:1px solid var(--line);
+    background-repeat:no-repeat;background-position:center;background-size:contain;flex:0 0 auto;
+  }
+  .cardTile .meta{min-width:0;flex:1;}
+  .cardTile .meta .n{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cardTile .meta .d{font-size:10.5px;color:var(--ink-soft);}
+  .cardTile .del{
+    opacity:0;width:20px;height:20px;border:none;background:transparent;color:var(--rust);
+    cursor:pointer;flex:0 0 auto;border-radius:5px;
+  }
+  .cardTile:hover .del{opacity:0.7;}
+  .cardTile .del:hover{opacity:1;background:rgba(168,65,43,0.12);}
+  .empty{padding:18px 6px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
+
+  /* insert grid for concepts tab */
+  .insertGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:2px 14px 14px;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;}
+  .insertTile{
+    border:1px solid var(--line);border-radius:8px;background:var(--paper);cursor:pointer;
+    padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px;
+  }
+  .insertTile:hover{border-color:var(--sage);}
+  .insertTile .thumb{width:100%;height:58px;background-repeat:no-repeat;background-position:center;background-size:contain;}
+  .insertTile .n{font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
+
+  #conceptsView .accentUse{--accent:var(--sage);--accent-dark:var(--sage-dark);}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:5px;}
+
+  @media (max-width:880px){
+    .view{grid-template-columns:1fr;grid-template-rows:auto 1fr auto;}
+    .toolbar{flex-direction:row;order:1;padding:8px;overflow-x:auto;overflow-y:hidden;border-right:none;border-bottom:1px solid var(--line);}
+    .toolbar input[type=range]{writing-mode:horizontal-tb;direction:ltr;-webkit-appearance:auto;width:70px;height:20px;}
+    .size-wrap{flex-direction:row;}
+    .tool-sep{width:1px;height:24px;}
+    .canvasWrap{order:2;}
+    .sidebar{order:3;max-height:38vh;flex-direction:row;flex-wrap:wrap;overflow-y:auto;}
+    .nameRow{flex:1 1 100%;}
+    .subsection{flex:1 1 50%;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">Atlas <small>draw · name · collect · combine</small></div>
+    <nav class="tabs">
+      <button id="tabCards" class="active">Cards</button>
+      <button id="tabConcepts">Concepts</button>
+    </nav>
+    <div class="headSpacer"></div>
+    <div class="toast" id="toast"></div>
+  </header>
+
+  <main>
+    <!-- ===================== CARDS TAB ===================== -->
+    <section id="cardsView" class="view">
+      <div class="toolbar" id="cardsToolbar"></div>
+      <div class="canvasWrap">
+        <canvas id="cardsCanvas"></canvas>
+        <div class="hint" id="cardsHint">Draw anywhere — scroll to zoom, hold space to pan</div>
+      </div>
+      <aside class="sidebar">
+        <div class="nameRow">
+          <input id="cardsName" type="text" placeholder="Name this sketch…" maxlength="40">
+          <div class="versionRow" id="cardsVersions"></div>
+          <div class="rowBtns">
+            <button class="btn primary" id="cardsSave">Add to atlas</button>
+            <button class="btn ghost" id="cardsNew">New</button>
+          </div>
+        </div>
+        <div class="subsection" style="border-top:none;">
+          <h3>Your cards</h3>
+          <div class="searchRow"><input id="cardsSearch" type="text" placeholder="Search cards…"></div>
+          <div class="list" id="cardsList"></div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- ===================== CONCEPTS TAB ===================== -->
+    <section id="conceptsView" class="view hidden accentUse">
+      <div class="toolbar" id="conceptsToolbar"></div>
+      <div class="canvasWrap">
+        <canvas id="conceptsCanvas"></canvas>
+        <div class="hint" id="conceptsHint">Click a card to place it, then draw between them</div>
+      </div>
+      <aside class="sidebar">
+        <div class="nameRow">
+          <input id="conceptsName" type="text" placeholder="Name this concept…" maxlength="40">
+          <div class="versionRow" id="conceptsVersions"></div>
+          <div class="rowBtns">
+            <button class="btn primary" id="conceptsSave">Add to concepts</button>
+            <button class="btn ghost" id="conceptsNew">New</button>
+          </div>
+        </div>
+        <div class="subsection" style="flex:1;border-top:none;">
+          <h3>Insert a card</h3>
+          <div class="searchRow"><input id="insertSearch" type="text" placeholder="Search your cards…"></div>
+          <div class="insertGrid" id="insertGrid" style="flex:1;"></div>
+        </div>
+        <div class="subsection" style="flex:1;">
+          <h3>Concepts</h3>
+          <div class="searchRow"><input id="conceptsSearch" type="text" placeholder="Search concepts…"></div>
+          <div class="list" id="conceptsList" style="flex:1;"></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   Storage helpers (Claude persistent artifact storage)
+============================================================ */
+const hasClaudeStorage = (typeof window.storage !== 'undefined') && window.storage
+  && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+
+async function storeGet(key){
+  try{
+    if(hasClaudeStorage){
+      const r = await window.storage.get(key);
+      return r ? JSON.parse(r.value) : null;
+    } else {
+      const v = localStorage.getItem('atlas:'+key);
+      return v ? JSON.parse(v) : null;
+    }
+  } catch(e){ return null; }
+}
+async function storeSet(key,val){
+  try{
+    if(hasClaudeStorage){
+      await window.storage.set(key, JSON.stringify(val));
+    } else {
+      localStorage.setItem('atlas:'+key, JSON.stringify(val));
+    }
+    return true;
+  } catch(e){ console.error('storage set failed',e); return false; }
+}
+async function storeDelete(key){
+  try{
+    if(hasClaudeStorage){ await window.storage.delete(key); }
+    else { localStorage.removeItem('atlas:'+key); }
+  } catch(e){}
+}
+
+function uid(){ return 'id_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function fmtDate(ts){
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+}
+
+/* ---- iPadOS / Safari hardening ----
+   Safari still fires legacy 'gesture*' events for trackpad/pencil pinch even
+   when touch-action:none is set, and can double-tap-zoom on fast taps. Both
+   would otherwise fight with our own pan/zoom handling on the canvas. */
+['gesturestart','gesturechange','gestureend'].forEach(evt=>{
+  document.addEventListener(evt, e=>e.preventDefault());
+});
+let _lastTouchEnd = 0;
+document.addEventListener('touchend', e=>{
+  const now = Date.now();
+  if(now - _lastTouchEnd < 350) e.preventDefault();
+  _lastTouchEnd = now;
+}, {passive:false});
+document.addEventListener('contextmenu', e=>e.preventDefault());
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>el.classList.remove('show'), 1800);
+}
+
+/* ============================================================
+   Drawing primitives shared by both canvases
+============================================================ */
+function computeBBox(items){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const it of items){
+    if(it.type==='stroke'){
+      const pad = it.size/2;
+      for(const p of it.points){
+        minX=Math.min(minX,p[0]-pad); minY=Math.min(minY,p[1]-pad);
+        maxX=Math.max(maxX,p[0]+pad); maxY=Math.max(maxY,p[1]+pad);
+      }
+    } else if(it.type==='image'){
+      minX=Math.min(minX,it.x); minY=Math.min(minY,it.y);
+      maxX=Math.max(maxX,it.x+it.w); maxY=Math.max(maxY,it.y+it.h);
+    }
+  }
+  if(!isFinite(minX)) return null;
+  return {minX,minY,maxX,maxY};
+}
+
+function drawItemsOnCtx(ctx, items){
+  for(const it of items){
+    if(it.type==='stroke'){
+      if(it.points.length===0) continue;
+      ctx.save();
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.lineWidth = it.size;
+      ctx.globalCompositeOperation = it.mode==='erase' ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = it.color;
+      ctx.beginPath();
+      if(it.points.length===1){
+        const p=it.points[0];
+        ctx.moveTo(p[0],p[1]); ctx.lineTo(p[0]+0.01,p[1]+0.01);
+      } else {
+        ctx.moveTo(it.points[0][0], it.points[0][1]);
+        for(let i=1;i<it.points.length;i++) ctx.lineTo(it.points[i][0], it.points[i][1]);
+      }
+      ctx.stroke();
+      ctx.restore();
+    } else if(it.type==='image'){
+      if(it.__img && it.__img.complete && it.__img.naturalWidth){
+        ctx.save();
+        ctx.globalCompositeOperation='source-over';
+        ctx.drawImage(it.__img, it.x, it.y, it.w, it.h);
+        ctx.restore();
+      }
+    }
+  }
+}
+
+function exportThumb(items, bbox, opts){
+  opts = opts || {};
+  const pad = opts.pad!=null? opts.pad : 18;
+  const maxDim = opts.maxDim || 480;
+  const w = (bbox.maxX-bbox.minX) + pad*2;
+  const h = (bbox.maxY-bbox.minY) + pad*2;
+  const scale = Math.min(maxDim/w, maxDim/h, 6);
+  const cw = Math.max(1, Math.round(w*scale));
+  const ch = Math.max(1, Math.round(h*scale));
+  const off = document.createElement('canvas');
+  off.width = cw; off.height = ch;
+  const octx = off.getContext('2d');
+  octx.setTransform(scale,0,0,scale, -(bbox.minX-pad)*scale, -(bbox.minY-pad)*scale);
+  drawItemsOnCtx(octx, items);
+  return { dataURL: off.toDataURL('image/png'), w: cw, h: ch };
+}
+
+function cloneItemsForStorage(items){
+  return JSON.parse(JSON.stringify(items, (k,v)=> k==='__img' ? undefined : v));
+}
+
+/* ============================================================
+   Engine: an infinite pan/zoom canvas
+============================================================ */
+class Engine{
+  constructor(canvas, hintEl, opts){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.hintEl = hintEl;
+    this.allowImages = !!(opts && opts.allowImages);
+    this.onChange = (opts && opts.onChange) || function(){};
+
+    this.items = [];
+    this.view = {x:-360,y:-260,scale:1};
+    this.tool = 'pen';
+    this.color = '#262A22';
+    this.size = 6;
+    this.selectedIndex = -1;
+    this.drawingStroke = null;
+    this.dragMode = null; // 'move' | 'resize'
+    this.dragStart = null;
+    this.pointers = new Map();
+    this.pinchStart = null;
+    this.history = [];
+    this._raf = null;
+
+    this.resize = this.resize.bind(this);
+    this.render = this.render.bind(this);
+    new ResizeObserver(this.resize).observe(canvas.parentElement);
+    this.bindEvents();
+    this.resize();
+    this.requestRender();
+  }
+
+  requestRender(){
+    if(this._raf) return;
+    this._raf = requestAnimationFrame(()=>{ this._raf=null; this.render(); });
+  }
+
+  resize(){
+    const dpr = window.devicePixelRatio||1;
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.canvas.width = Math.max(1,Math.round(rect.width*dpr));
+    this.canvas.height = Math.max(1,Math.round(rect.height*dpr));
+    this.dpr = dpr;
+    this.requestRender();
+  }
+
+  screenToWorld(sx,sy){
+    const r = this.canvas.getBoundingClientRect();
+    return { x: this.view.x + (sx-r.left)/this.view.scale, y: this.view.y + (sy-r.top)/this.view.scale };
+  }
+
+  pushHistory(){
+    this.history.push(cloneItemsForStorage(this.items));
+    if(this.history.length>40) this.history.shift();
+  }
+  undo(){
+    if(!this.history.length) return;
+    this.items = this.history.pop();
+    this.ensureImagesLoaded();
+    this.selectedIndex=-1;
+    this.requestRender();
+    this.onChange();
+  }
+
+  ensureImagesLoaded(){
+    for(const it of this.items){
+      if(it.type==='image' && !it.__img){
+        const img = new Image();
+        img.onload = ()=> this.requestRender();
+        img.src = it.src;
+        it.__img = img;
+      }
+    }
+  }
+
+  reset(){
+    this.items = [];
+    this.selectedIndex = -1;
+    this.history = [];
+    this.view = {x:-360,y:-260,scale:1};
+    this.requestRender();
+  }
+
+  loadItems(items){
+    this.items = cloneItemsForStorage(items);
+    this.ensureImagesLoaded();
+    this.selectedIndex = -1;
+    this.history = [];
+    const bbox = computeBBox(this.items);
+    if(bbox){
+      const rect = this.canvas.getBoundingClientRect();
+      const w = bbox.maxX-bbox.minX, h = bbox.maxY-bbox.minY;
+      const scale = clamp(Math.min(rect.width/(w+120), rect.height/(h+120)), 0.08, 2.5);
+      this.view.scale = scale;
+      this.view.x = bbox.minX - (rect.width/scale - w)/2;
+      this.view.y = bbox.minY - (rect.height/scale - h)/2;
+    } else {
+      this.view = {x:-360,y:-260,scale:1};
+    }
+    this.requestRender();
+  }
+
+  addImageItem(cardData, screenCenter){
+    this.pushHistory();
+    const aspect = cardData.h / cardData.w;
+    const w = 220;
+    const h = w*aspect;
+    const center = screenCenter ? this.screenToWorld(screenCenter.x, screenCenter.y) : this.screenToWorld(this.canvas.getBoundingClientRect().width/2+this.canvas.getBoundingClientRect().left, this.canvas.getBoundingClientRect().height/2+this.canvas.getBoundingClientRect().top);
+    const item = { type:'image', cardId:cardData.id, name:cardData.name, src:cardData.thumb, x:center.x-w/2, y:center.y-h/2, w, h };
+    const img = new Image();
+    img.onload = ()=> this.requestRender();
+    img.src = item.src;
+    item.__img = img;
+    this.items.push(item);
+    this.selectedIndex = this.items.length-1;
+    this.requestRender();
+    this.onChange();
+  }
+
+  deleteSelected(){
+    if(this.selectedIndex<0) return;
+    this.pushHistory();
+    this.items.splice(this.selectedIndex,1);
+    this.selectedIndex=-1;
+    this.requestRender();
+    this.onChange();
+  }
+
+  hitTestImage(wx,wy){
+    for(let i=this.items.length-1;i>=0;i--){
+      const it=this.items[i];
+      if(it.type!=='image') continue;
+      if(wx>=it.x && wx<=it.x+it.w && wy>=it.y && wy<=it.y+it.h) return i;
+    }
+    return -1;
+  }
+  hitTestHandle(wx,wy){
+    if(this.selectedIndex<0) return false;
+    const it=this.items[this.selectedIndex];
+    if(!it || it.type!=='image') return false;
+    const hs = 14/this.view.scale;
+    return Math.abs(wx-(it.x+it.w))<hs && Math.abs(wy-(it.y+it.h))<hs;
+  }
+
+  bindEvents(){
+    const c = this.canvas;
+    c.addEventListener('pointerdown', e=>this.onPointerDown(e));
+    c.addEventListener('pointermove', e=>this.onPointerMove(e));
+    window.addEventListener('pointerup', e=>this.onPointerUp(e));
+    c.addEventListener('wheel', e=>this.onWheel(e), {passive:false});
+    window.addEventListener('keydown', e=>{
+      if(e.code==='Space') this.spaceDown = true;
+      if((e.key==='Delete'||e.key==='Backspace') && this.selectedIndex>=0 && document.activeElement.tagName!=='INPUT'){
+        this.deleteSelected();
+      }
+    });
+    window.addEventListener('keyup', e=>{ if(e.code==='Space') this.spaceDown=false; });
+  }
+
+  currentModeIsPan(e){
+    return this.tool==='pan' || this.spaceDown || e.button===1 || (e.pointerType==='touch' && this.pointers.size>=2);
+  }
+
+  onPointerDown(e){
+    this.canvas.setPointerCapture(e.pointerId);
+    this.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    this.hintEl && (this.hintEl.style.opacity='0');
+
+    if(this.pointers.size>=2){
+      this.drawingStroke = null;
+      const pts = [...this.pointers.values()];
+      this.pinchStart = {
+        d: Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y),
+        mid: {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2},
+        view: {...this.view}
+      };
+      return;
+    }
+
+    if(this.currentModeIsPan(e)){
+      this.isPanning = true;
+      this.panStart = {x:e.clientX,y:e.clientY, view:{...this.view}};
+      this.canvas.classList.add('panning');
+      return;
+    }
+
+    const w = this.screenToWorld(e.clientX,e.clientY);
+
+    if(this.tool==='select' && this.allowImages){
+      if(this.hitTestHandle(w.x,w.y)){
+        this.dragMode='resize';
+        this.dragStart={wx:w.x,wy:w.y,item:{...this.items[this.selectedIndex]}};
+        this.pushHistory();
+        return;
+      }
+      const hit = this.hitTestImage(w.x,w.y);
+      this.selectedIndex = hit;
+      if(hit>=0){
+        this.dragMode='move';
+        this.dragStart={wx:w.x,wy:w.y,ox:this.items[hit].x,oy:this.items[hit].y};
+        this.pushHistory();
+      }
+      this.requestRender();
+      return;
+    }
+
+    if(this.tool==='pen' || this.tool==='eraser'){
+      this.drawingStroke = { type:'stroke', color:this.color, size:this.size, mode: this.tool==='eraser'?'erase':'draw', points:[[w.x,w.y]] };
+      this.requestRender();
+    }
+  }
+
+  onPointerMove(e){
+    if(this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+    if(this.pointers.size>=2 && this.pinchStart){
+      const pts=[...this.pointers.values()];
+      const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      const mid = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+      const factor = d/(this.pinchStart.d||1);
+      const newScale = clamp(this.pinchStart.view.scale*factor, 0.05, 8);
+      const rect = this.canvas.getBoundingClientRect();
+      const worldAtStart = { x: this.pinchStart.view.x + (this.pinchStart.mid.x-rect.left)/this.pinchStart.view.scale,
+                              y: this.pinchStart.view.y + (this.pinchStart.mid.y-rect.top)/this.pinchStart.view.scale };
+      this.view.scale = newScale;
+      this.view.x = worldAtStart.x - (mid.x-rect.left)/newScale;
+      this.view.y = worldAtStart.y - (mid.y-rect.top)/newScale;
+      this.requestRender();
+      return;
+    }
+
+    if(this.isPanning){
+      const dx = (e.clientX-this.panStart.x)/this.view.scale;
+      const dy = (e.clientY-this.panStart.y)/this.view.scale;
+      this.view.x = this.panStart.view.x - dx;
+      this.view.y = this.panStart.view.y - dy;
+      this.requestRender();
+      return;
+    }
+
+    const w = this.screenToWorld(e.clientX,e.clientY);
+
+    if(this.dragMode==='move' && this.selectedIndex>=0){
+      const it = this.items[this.selectedIndex];
+      it.x = this.dragStart.ox + (w.x-this.dragStart.wx);
+      it.y = this.dragStart.oy + (w.y-this.dragStart.wy);
+      this.requestRender();
+      return;
+    }
+    if(this.dragMode==='resize' && this.selectedIndex>=0){
+      const it = this.items[this.selectedIndex];
+      const orig = this.dragStart.item;
+      const aspect = orig.h/orig.w;
+      let newW = Math.max(24, w.x - orig.x);
+      let newH = newW*aspect;
+      it.w = newW; it.h = newH;
+      this.requestRender();
+      return;
+    }
+
+    if(this.drawingStroke){
+      const pts = this.drawingStroke.points;
+      const last = pts[pts.length-1];
+      if(Math.hypot(w.x-last[0], w.y-last[1]) > 0.6/this.view.scale){
+        pts.push([w.x,w.y]);
+        this.requestRender();
+      }
+    }
+  }
+
+  onPointerUp(e){
+    this.pointers.delete(e.pointerId);
+    if(this.pointers.size<2) this.pinchStart=null;
+    if(this.isPanning){
+      this.isPanning=false;
+      this.canvas.classList.remove('panning');
+    }
+    if(this.dragMode){
+      this.dragMode=null;
+      this.onChange();
+    }
+    if(this.drawingStroke){
+      if(this.drawingStroke.points.length>0){
+        this.pushHistory();
+        this.items.push(this.drawingStroke);
+        this.onChange();
+      }
+      this.drawingStroke = null;
+      this.requestRender();
+    }
+  }
+
+  onWheel(e){
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY*0.0012);
+    const before = this.screenToWorld(e.clientX,e.clientY);
+    this.view.scale = clamp(this.view.scale*factor, 0.05, 8);
+    const after = this.screenToWorld(e.clientX,e.clientY);
+    this.view.x += before.x-after.x;
+    this.view.y += before.y-after.y;
+    this.requestRender();
+  }
+
+  drawGrid(ctx, rect){
+    if(this.view.scale < 0.12) return;
+    const spacing = 40;
+    const left = this.view.x, top = this.view.y;
+    const right = left + rect.width/this.view.scale;
+    const bottom = top + rect.height/this.view.scale;
+    const startX = Math.floor(left/spacing)*spacing;
+    const startY = Math.floor(top/spacing)*spacing;
+    ctx.fillStyle = 'rgba(38,42,34,0.10)';
+    const r = 1.4/this.view.scale;
+    for(let x=startX; x<right; x+=spacing){
+      for(let y=startY; y<bottom; y+=spacing){
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  render(){
+    const ctx=this.ctx, cvs=this.canvas;
+    const dpr = this.dpr||1;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    ctx.setTransform(this.view.scale*dpr,0,0,this.view.scale*dpr, -this.view.x*this.view.scale*dpr, -this.view.y*this.view.scale*dpr);
+    const rect = {width: cvs.width/dpr, height: cvs.height/dpr};
+    this.drawGrid(ctx, rect);
+    drawItemsOnCtx(ctx, this.items);
+    if(this.drawingStroke) drawItemsOnCtx(ctx, [this.drawingStroke]);
+
+    if(this.selectedIndex>=0 && this.items[this.selectedIndex] && this.items[this.selectedIndex].type==='image'){
+      const it = this.items[this.selectedIndex];
+      ctx.save();
+      ctx.strokeStyle = '#4E6E56';
+      ctx.lineWidth = 1.6/this.view.scale;
+      ctx.setLineDash([6/this.view.scale,4/this.view.scale]);
+      ctx.strokeRect(it.x,it.y,it.w,it.h);
+      ctx.setLineDash([]);
+      ctx.fillStyle='#4E6E56';
+      const hs = 6/this.view.scale;
+      ctx.fillRect(it.x+it.w-hs, it.y+it.h-hs, hs*2, hs*2);
+      ctx.restore();
+    }
+  }
+}
+
+/* ============================================================
+   Toolbar builder
+============================================================ */
+const ICONS = {
+  pen:  '<svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+  eraser:'<svg viewBox="0 0 24 24"><path d="M20 20H8l-6-6a2 2 0 010-2.8L13.2 2 22 10.8 12.4 20.4"/><path d="M6 14l6 6"/></svg>',
+  pan:  '<svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 00-4 0v5"/><path d="M14 10V4a2 2 0 00-4 0v7"/><path d="M10 10.5V6a2 2 0 00-4 0v8"/><path d="M6 14l-1.5-1.5a1.5 1.5 0 00-2 2.2L6 18a7 7 0 007 3h2a6 6 0 006-6v-3"/></svg>',
+  select:'<svg viewBox="0 0 24 24"><path d="M4 3l7 18 2.5-7.5L21 11 4 3z"/></svg>',
+  undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
+  clear:'<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>',
+  reset:'<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>'
+};
+const COLORS = ['#262A22','#A8412B','#B07C22','#4E6E56','#3A5A78','#EAE7DA'];
+
+function buildToolbar(el, engine, opts){
+  opts = opts||{};
+  el.innerHTML='';
+  function toolBtn(name, icon, title){
+    const b=document.createElement('button');
+    b.className='tool-btn'; b.title=title; b.innerHTML=icon;
+    b.addEventListener('click', ()=>{ setTool(name); });
+    el.appendChild(b);
+    return b;
+  }
+  const buttons = {};
+  buttons.pen = toolBtn('pen', ICONS.pen, 'Pen');
+  buttons.eraser = toolBtn('eraser', ICONS.eraser, 'Eraser');
+  if(opts.allowSelect) buttons.select = toolBtn('select', ICONS.select, 'Select / move / resize');
+  buttons.pan = toolBtn('pan', ICONS.pan, 'Pan (or hold space)');
+
+  function setTool(name){
+    engine.tool = name;
+    Object.entries(buttons).forEach(([k,b])=> b.classList.toggle('active', k===name));
+    engine.canvas.classList.toggle('tool-pan', name==='pan');
+    engine.canvas.classList.toggle('tool-select', name==='select');
+  }
+  setTool('pen');
+
+  const sep1=document.createElement('div'); sep1.className='tool-sep'; el.appendChild(sep1);
+
+  const swatchWrap=document.createElement('div'); swatchWrap.className='swatches';
+  const swatchBtns=[];
+  COLORS.forEach((c,i)=>{
+    const s=document.createElement('button');
+    s.className='swatch'+(i===0?' active':'');
+    s.style.background=c;
+    s.addEventListener('click', ()=>{
+      engine.color=c;
+      swatchBtns.forEach(x=>x.classList.remove('active'));
+      s.classList.add('active');
+      custom.value = c.length===7? c : '#262a22';
+    });
+    swatchWrap.appendChild(s);
+    swatchBtns.push(s);
+  });
+  const custom=document.createElement('input');
+  custom.type='color'; custom.className='swatch-custom'; custom.value='#262A22';
+  custom.addEventListener('input', ()=>{
+    engine.color=custom.value;
+    swatchBtns.forEach(x=>x.classList.remove('active'));
+  });
+  swatchWrap.appendChild(custom);
+  el.appendChild(swatchWrap);
+
+  const sep2=document.createElement('div'); sep2.className='tool-sep'; el.appendChild(sep2);
+
+  const sizeWrap=document.createElement('div'); sizeWrap.className='size-wrap';
+  const dot=document.createElement('div'); dot.className='size-dot'; dot.style.width='8px'; dot.style.height='8px';
+  const range=document.createElement('input'); range.type='range'; range.min='2'; range.max='40'; range.value='6';
+  range.addEventListener('input', ()=>{
+    engine.size = +range.value;
+    const d = clamp(engine.size,3,22);
+    dot.style.width=d+'px'; dot.style.height=d+'px';
+  });
+  sizeWrap.appendChild(dot); sizeWrap.appendChild(range);
+  el.appendChild(sizeWrap);
+
+  const sep3=document.createElement('div'); sep3.className='tool-sep'; el.appendChild(sep3);
+
+  const undoBtn = document.createElement('button');
+  undoBtn.className='tool-btn'; undoBtn.title='Undo'; undoBtn.innerHTML=ICONS.undo;
+  undoBtn.addEventListener('click', ()=> engine.undo());
+  el.appendChild(undoBtn);
+  const clearBtn = document.createElement('button');
+  clearBtn.className='tool-btn'; clearBtn.title='Clear canvas'; clearBtn.innerHTML=ICONS.clear;
+  clearBtn.addEventListener('click', ()=>{
+    if(engine.items.length && confirm('Clear the current drawing? This only affects what has not been saved yet.')){
+      engine.pushHistory();
+      engine.items=[];
+      engine.selectedIndex=-1;
+      engine.requestRender();
+    }
+  });
+  el.appendChild(clearBtn);
+
+  const sep4=document.createElement('div'); sep4.className='tool-sep'; el.appendChild(sep4);
+  const resetBtn=document.createElement('button');
+  resetBtn.className='tool-btn'; resetBtn.title='Reset view'; resetBtn.innerHTML=ICONS.reset;
+  resetBtn.addEventListener('click', ()=>{ engine.view={x:-360,y:-260,scale:1}; engine.requestRender(); });
+  el.appendChild(resetBtn);
+}
+
+/* ============================================================
+   App state + persistence
+============================================================ */
+const State = {
+  cardsIndex: [],
+  conceptsIndex: [],
+  editingCardId: null,
+  editingConceptId: null,
+  cardManifest: null,       // full {id,createdAt,updatedAt,versions:[...]} for the open card
+  currentCardVersionIndex: -1,
+  conceptManifest: null,
+  currentConceptVersionIndex: -1,
+};
+
+function renderVersionChips(kind){
+  const manifest = kind==='cards' ? State.cardManifest : State.conceptManifest;
+  const curIdx = kind==='cards' ? State.currentCardVersionIndex : State.currentConceptVersionIndex;
+  const container = document.getElementById(kind==='cards' ? 'cardsVersions' : 'conceptsVersions');
+  container.innerHTML='';
+  if(!manifest || manifest.versions.length<2){ container.style.display='none'; return; }
+  container.style.display='flex';
+  const label = document.createElement('span');
+  label.className='vLabel';
+  label.textContent='History:';
+  container.appendChild(label);
+  manifest.versions.forEach((v,i)=>{
+    const chip=document.createElement('button');
+    chip.className='verChip'+(i===curIdx?' active':'')+(i===manifest.versions.length-1?' latest':'');
+    chip.textContent = v.v;
+    chip.title = v.name+' — '+new Date(v.savedAt).toLocaleString();
+    chip.addEventListener('click', ()=>{
+      if(kind==='cards') loadCardVersion(i); else loadConceptVersion(i);
+    });
+    container.appendChild(chip);
+  });
+}
+
+async function loadIndexes(){
+  State.cardsIndex = (await storeGet('cards-index')) || [];
+  State.conceptsIndex = (await storeGet('concepts-index')) || [];
+}
+
+async function saveCardsIndex(){ await storeSet('cards-index', State.cardsIndex); }
+async function saveConceptsIndex(){ await storeSet('concepts-index', State.conceptsIndex); }
+
+/* ============================================================
+   Wire up engines
+============================================================ */
+const cardsCanvas = document.getElementById('cardsCanvas');
+const conceptsCanvas = document.getElementById('conceptsCanvas');
+
+const cardsEngine = new Engine(cardsCanvas, document.getElementById('cardsHint'), {allowImages:false});
+const conceptsEngine = new Engine(conceptsCanvas, document.getElementById('conceptsHint'), {allowImages:true});
+
+buildToolbar(document.getElementById('cardsToolbar'), cardsEngine, {allowSelect:false});
+buildToolbar(document.getElementById('conceptsToolbar'), conceptsEngine, {allowSelect:true});
+
+function resizeActiveEngines(){
+  cardsEngine.resize();
+  conceptsEngine.resize();
+}
+window.addEventListener('orientationchange', ()=> setTimeout(resizeActiveEngines, 300));
+window.addEventListener('resize', resizeActiveEngines);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', resizeActiveEngines);
+}
+
+/* ---------------- Tabs ---------------- */
+const tabCards = document.getElementById('tabCards');
+const tabConcepts = document.getElementById('tabConcepts');
+const cardsView = document.getElementById('cardsView');
+const conceptsView = document.getElementById('conceptsView');
+tabCards.addEventListener('click', ()=>{
+  tabCards.classList.add('active'); tabConcepts.classList.remove('active');
+  cardsView.classList.remove('hidden'); conceptsView.classList.add('hidden');
+  cardsEngine.resize();
+});
+tabConcepts.addEventListener('click', ()=>{
+  tabConcepts.classList.add('active'); tabCards.classList.remove('active');
+  conceptsView.classList.remove('hidden'); cardsView.classList.add('hidden');
+  conceptsEngine.resize();
+  refreshInsertGrid();
+});
+
+/* ============================================================
+   CARDS TAB logic
+============================================================ */
+const cardsNameInput = document.getElementById('cardsName');
+const cardsSaveBtn = document.getElementById('cardsSave');
+const cardsNewBtn = document.getElementById('cardsNew');
+const cardsSearch = document.getElementById('cardsSearch');
+const cardsListEl = document.getElementById('cardsList');
+
+function newCard(){
+  State.editingCardId = null;
+  State.cardManifest = null;
+  State.currentCardVersionIndex = -1;
+  cardsEngine.reset();
+  cardsNameInput.value='';
+  cardsSaveBtn.textContent='Add to atlas';
+  renderVersionChips('cards');
+  renderCardsList();
+}
+cardsNewBtn.addEventListener('click', newCard);
+
+async function saveCard(){
+  if(cardsEngine.items.length===0){ toast('Draw something first'); return; }
+  const name = cardsNameInput.value.trim() || 'Untitled sketch';
+  const items = cloneItemsForStorage(cardsEngine.items);
+  const bbox = computeBBox(items);
+  const now = Date.now();
+
+  let manifest = State.cardManifest && State.cardManifest.id===State.editingCardId ? State.cardManifest : null;
+  if(State.editingCardId && !manifest) manifest = await storeGet('card:'+State.editingCardId);
+
+  if(manifest){
+    const last = manifest.versions[manifest.versions.length-1];
+    if(last && last.name===name && JSON.stringify(last.items)===JSON.stringify(items)){
+      toast('No changes to save');
+      return;
+    }
+  }
+
+  const {dataURL,w,h} = exportThumb(items, bbox, {maxDim:480});
+  const versionEntry = { v: manifest ? manifest.versions.length+1 : 1, name, items, bbox, thumb:dataURL, w, h, savedAt: now };
+
+  if(manifest){
+    manifest.versions.push(versionEntry);
+    manifest.updatedAt = now;
+  } else {
+    manifest = { id: uid(), createdAt: now, updatedAt: now, versions: [versionEntry] };
+    State.editingCardId = manifest.id;
+  }
+
+  const ok = await storeSet('card:'+manifest.id, manifest);
+  if(!ok){ toast('Could not save — try again'); return; }
+
+  State.cardManifest = manifest;
+  State.currentCardVersionIndex = manifest.versions.length-1;
+
+  State.cardsIndex = State.cardsIndex.filter(c=>c.id!==manifest.id);
+  State.cardsIndex.unshift({id:manifest.id,name,thumb:dataURL,w,h,createdAt:manifest.createdAt,updatedAt:now,versionCount:manifest.versions.length});
+  await saveCardsIndex();
+
+  cardsSaveBtn.textContent='Save changes';
+  toast(manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to atlas');
+  renderVersionChips('cards');
+  renderCardsList();
+}
+cardsSaveBtn.addEventListener('click', saveCard);
+
+async function openCard(id){
+  const manifest = await storeGet('card:'+id);
+  if(!manifest){ toast('Could not load card'); return; }
+  State.editingCardId = id;
+  State.cardManifest = manifest;
+  cardsSaveBtn.textContent='Save changes';
+  loadCardVersion(manifest.versions.length-1);
+  renderCardsList();
+}
+
+function loadCardVersion(idx){
+  const ver = State.cardManifest.versions[idx];
+  State.currentCardVersionIndex = idx;
+  cardsEngine.loadItems(ver.items);
+  cardsNameInput.value = ver.name;
+  renderVersionChips('cards');
+}
+
+async function deleteCard(id, ev){
+  ev.stopPropagation();
+  if(!confirm('Delete this card? This cannot be undone.')) return;
+  await storeDelete('card:'+id);
+  State.cardsIndex = State.cardsIndex.filter(c=>c.id!==id);
+  await saveCardsIndex();
+  if(State.editingCardId===id) newCard();
+  renderCardsList();
+}
+
+function renderCardsList(){
+  const q = cardsSearch.value.trim().toLowerCase();
+  const items = State.cardsIndex.filter(c=>c.name.toLowerCase().includes(q));
+  cardsListEl.innerHTML='';
+  if(items.length===0){
+    const e=document.createElement('div'); e.className='empty';
+    e.textContent = State.cardsIndex.length===0 ? 'No cards yet — draw something and give it a name.' : 'No cards match your search.';
+    cardsListEl.appendChild(e);
+    return;
+  }
+  for(const c of items){
+    const tile=document.createElement('div');
+    tile.className='cardTile'+(c.id===State.editingCardId?' active':'');
+    tile.innerHTML = `<div class="thumb" style="background-image:url('${c.thumb}')"></div>
+      <div class="meta"><div class="n"></div><div class="d">${fmtDate(c.updatedAt)}${c.versionCount>1?' · v'+c.versionCount:''}</div></div>
+      <button class="del" title="Delete">✕</button>`;
+    tile.querySelector('.n').textContent = c.name;
+    tile.addEventListener('click', ()=>openCard(c.id));
+    tile.querySelector('.del').addEventListener('click', (e)=>deleteCard(c.id,e));
+    cardsListEl.appendChild(tile);
+  }
+}
+cardsSearch.addEventListener('input', renderCardsList);
+
+/* ============================================================
+   CONCEPTS TAB logic
+============================================================ */
+const conceptsNameInput = document.getElementById('conceptsName');
+const conceptsSaveBtn = document.getElementById('conceptsSave');
+const conceptsNewBtn = document.getElementById('conceptsNew');
+const conceptsSearch = document.getElementById('conceptsSearch');
+const conceptsListEl = document.getElementById('conceptsList');
+const insertSearch = document.getElementById('insertSearch');
+const insertGrid = document.getElementById('insertGrid');
+
+function newConcept(){
+  State.editingConceptId = null;
+  State.conceptManifest = null;
+  State.currentConceptVersionIndex = -1;
+  conceptsEngine.reset();
+  conceptsNameInput.value='';
+  conceptsSaveBtn.textContent='Add to concepts';
+  renderVersionChips('concepts');
+  renderConceptsList();
+}
+conceptsNewBtn.addEventListener('click', newConcept);
+
+async function saveConcept(){
+  if(conceptsEngine.items.length===0){ toast('Add a card or draw something first'); return; }
+  const name = conceptsNameInput.value.trim() || 'Untitled concept';
+  const items = cloneItemsForStorage(conceptsEngine.items);
+  const bbox = computeBBox(items);
+  const now = Date.now();
+
+  let manifest = State.conceptManifest && State.conceptManifest.id===State.editingConceptId ? State.conceptManifest : null;
+  if(State.editingConceptId && !manifest) manifest = await storeGet('concept:'+State.editingConceptId);
+
+  if(manifest){
+    const last = manifest.versions[manifest.versions.length-1];
+    if(last && last.name===name && JSON.stringify(last.items)===JSON.stringify(items)){
+      toast('No changes to save');
+      return;
+    }
+  }
+
+  conceptsEngine.ensureImagesLoaded();
+  const {dataURL,w,h} = exportThumb(conceptsEngine.items, bbox, {maxDim:480});
+  const versionEntry = { v: manifest ? manifest.versions.length+1 : 1, name, items, bbox, thumb:dataURL, w, h, savedAt: now };
+
+  if(manifest){
+    manifest.versions.push(versionEntry);
+    manifest.updatedAt = now;
+  } else {
+    manifest = { id: uid(), createdAt: now, updatedAt: now, versions: [versionEntry] };
+    State.editingConceptId = manifest.id;
+  }
+
+  const ok = await storeSet('concept:'+manifest.id, manifest);
+  if(!ok){ toast('Could not save — try again'); return; }
+
+  State.conceptManifest = manifest;
+  State.currentConceptVersionIndex = manifest.versions.length-1;
+
+  State.conceptsIndex = State.conceptsIndex.filter(c=>c.id!==manifest.id);
+  State.conceptsIndex.unshift({id:manifest.id,name,thumb:dataURL,w,h,createdAt:manifest.createdAt,updatedAt:now,versionCount:manifest.versions.length});
+  await saveConceptsIndex();
+
+  conceptsSaveBtn.textContent='Save changes';
+  toast(manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to concepts');
+  renderVersionChips('concepts');
+  renderConceptsList();
+}
+conceptsSaveBtn.addEventListener('click', saveConcept);
+
+async function openConcept(id){
+  const manifest = await storeGet('concept:'+id);
+  if(!manifest){ toast('Could not load concept'); return; }
+  State.editingConceptId = id;
+  State.conceptManifest = manifest;
+  conceptsSaveBtn.textContent='Save changes';
+  loadConceptVersion(manifest.versions.length-1);
+  renderConceptsList();
+}
+
+function loadConceptVersion(idx){
+  const ver = State.conceptManifest.versions[idx];
+  State.currentConceptVersionIndex = idx;
+  conceptsEngine.loadItems(ver.items);
+  conceptsNameInput.value = ver.name;
+  renderVersionChips('concepts');
+}
+
+async function deleteConcept(id, ev){
+  ev.stopPropagation();
+  if(!confirm('Delete this concept? This cannot be undone.')) return;
+  await storeDelete('concept:'+id);
+  State.conceptsIndex = State.conceptsIndex.filter(c=>c.id!==id);
+  await saveConceptsIndex();
+  if(State.editingConceptId===id) newConcept();
+  renderConceptsList();
+}
+
+function renderConceptsList(){
+  const q = conceptsSearch.value.trim().toLowerCase();
+  const items = State.conceptsIndex.filter(c=>c.name.toLowerCase().includes(q));
+  conceptsListEl.innerHTML='';
+  if(items.length===0){
+    const e=document.createElement('div'); e.className='empty';
+    e.textContent = State.conceptsIndex.length===0 ? 'No concepts yet — combine some cards and save.' : 'No concepts match your search.';
+    conceptsListEl.appendChild(e);
+    return;
+  }
+  for(const c of items){
+    const tile=document.createElement('div');
+    tile.className='cardTile'+(c.id===State.editingConceptId?' active':'');
+    tile.innerHTML = `<div class="thumb" style="background-image:url('${c.thumb}')"></div>
+      <div class="meta"><div class="n"></div><div class="d">${fmtDate(c.updatedAt)}${c.versionCount>1?' · v'+c.versionCount:''}</div></div>
+      <button class="del" title="Delete">✕</button>`;
+    tile.querySelector('.n').textContent = c.name;
+    tile.addEventListener('click', ()=>openConcept(c.id));
+    tile.querySelector('.del').addEventListener('click', (e)=>deleteConcept(c.id,e));
+    conceptsListEl.appendChild(tile);
+  }
+}
+conceptsSearch.addEventListener('input', renderConceptsList);
+
+function refreshInsertGrid(){
+  const q = insertSearch.value.trim().toLowerCase();
+  const items = State.cardsIndex.filter(c=>c.name.toLowerCase().includes(q));
+  insertGrid.innerHTML='';
+  if(items.length===0){
+    const e=document.createElement('div'); e.className='empty';
+    e.style.gridColumn='1/-1';
+    e.textContent = State.cardsIndex.length===0 ? 'Draw a card in the Cards tab first.' : 'No cards match your search.';
+    insertGrid.appendChild(e);
+    return;
+  }
+  for(const c of items){
+    const tile=document.createElement('div');
+    tile.className='insertTile';
+    tile.innerHTML = `<div class="thumb" style="background-image:url('${c.thumb}')"></div><div class="n"></div>`;
+    tile.querySelector('.n').textContent=c.name;
+    tile.addEventListener('click', ()=>{
+      conceptsEngine.tool='select';
+      document.querySelectorAll('#conceptsToolbar .tool-btn').forEach(b=>b.classList.remove('active'));
+      conceptsCanvas.classList.add('tool-select');
+      conceptsEngine.addImageItem(c);
+      toast('Added "'+c.name+'"');
+    });
+    insertGrid.appendChild(tile);
+  }
+}
+insertSearch.addEventListener('input', refreshInsertGrid);
+
+/* ============================================================
+   Boot
+============================================================ */
+(async function init(){
+  await loadIndexes();
+  renderCardsList();
+  renderConceptsList();
+  refreshInsertGrid();
+})();
+</script>
+</body>
+</html>
