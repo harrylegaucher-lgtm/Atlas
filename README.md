@@ -21,6 +21,10 @@ look back at how a card or concept evolved and jump between versions at any
 time. Cards and concepts can also be renamed on the fly from their list, and
 the latest version always loads first.
 
+The six default brush-color swatches in the toolbar are yours to customize:
+double-click one to pick a new color for it — it replaces that swatch and
+stays there for every vault, until you change it again.
+
 It's a single self-contained HTML file — no build step, no server, no
 external dependencies.
 

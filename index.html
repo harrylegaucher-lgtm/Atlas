@@ -916,6 +916,28 @@ const ICONS = {
   edit:'<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
 };
 const COLORS = ['#262A22','#A8412B','#B07C22','#4E6E56','#3A5A78','#EAE7DA'];
+const swatchButtonRegistry = []; // {btn, index} across both toolbars, kept in sync when a default color is customized
+
+let _swatchColorEditor = null;
+function getSwatchColorEditor(){
+  if(!_swatchColorEditor){
+    _swatchColorEditor = document.createElement('input');
+    _swatchColorEditor.type='color';
+    Object.assign(_swatchColorEditor.style, {position:'fixed', left:'-9999px', top:'0', width:'1px', height:'1px', opacity:'0'});
+    document.body.appendChild(_swatchColorEditor);
+  }
+  return _swatchColorEditor;
+}
+
+async function setDefaultSwatchColor(i, hex){
+  State.swatchColors[i] = hex;
+  refreshSwatchButtons();
+  await storeSet('swatch-colors', State.swatchColors);
+}
+
+function refreshSwatchButtons(){
+  swatchButtonRegistry.forEach(({btn,index})=>{ btn.style.background = State.swatchColors[index]; });
+}
 
 function buildToolbar(el, engine, opts){
   opts = opts||{};
@@ -945,18 +967,36 @@ function buildToolbar(el, engine, opts){
 
   const swatchWrap=document.createElement('div'); swatchWrap.className='swatches';
   const swatchBtns=[];
-  COLORS.forEach((c,i)=>{
+  State.swatchColors.forEach((c,i)=>{
     const s=document.createElement('button');
     s.className='swatch'+(i===0?' active':'');
     s.style.background=c;
+    s.title='Click to select · double-click to change this default';
     s.addEventListener('click', ()=>{
-      engine.color=c;
+      const color = State.swatchColors[i];
+      engine.color=color;
       swatchBtns.forEach(x=>x.classList.remove('active'));
       s.classList.add('active');
-      custom.value = c.length===7? c : '#262a22';
+      custom.value = color.length===7? color : '#262a22';
+    });
+    s.addEventListener('dblclick', (ev)=>{
+      ev.preventDefault();
+      const editor = getSwatchColorEditor();
+      editor.value = State.swatchColors[i];
+      editor.oninput = ()=>{
+        // live preview on this swatch while the picker is open, before it's committed
+        s.style.background = editor.value;
+        engine.color = editor.value;
+        swatchBtns.forEach(x=>x.classList.remove('active'));
+        s.classList.add('active');
+        custom.value = editor.value;
+      };
+      editor.onchange = ()=>{ setDefaultSwatchColor(i, editor.value); };
+      editor.click();
     });
     swatchWrap.appendChild(s);
     swatchBtns.push(s);
+    swatchButtonRegistry.push({btn:s, index:i});
   });
   const custom=document.createElement('input');
   custom.type='color'; custom.className='swatch-custom'; custom.value='#262A22';
@@ -1020,6 +1060,7 @@ const State = {
   conceptManifest: null,
   currentConceptVersionIndex: -1,
   cardsEditorTags: [],      // tags currently shown in the cards-tab tag editor
+  swatchColors: COLORS.slice(), // customizable default brush colors (persisted globally)
 };
 
 function vaultKey(key){ return 'vault:'+State.currentVaultId+':'+key; }
@@ -1679,6 +1720,11 @@ insertSearch.addEventListener('input', refreshInsertGrid);
    Boot
 ============================================================ */
 (async function init(){
+  const storedSwatches = await storeGet('swatch-colors');
+  if(Array.isArray(storedSwatches) && storedSwatches.length===State.swatchColors.length){
+    State.swatchColors = storedSwatches;
+    refreshSwatchButtons();
+  }
   await migrateLegacyDataIfNeeded();
   showVaultPicker();
 })();
