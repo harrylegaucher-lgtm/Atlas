@@ -425,17 +425,15 @@ function fmtDate(ts){
 
 /* ---- iPadOS / Safari hardening ----
    Safari still fires legacy 'gesture*' events for trackpad/pencil pinch even
-   when touch-action:none is set, and can double-tap-zoom on fast taps. Both
-   would otherwise fight with our own pan/zoom handling on the canvas. */
+   when touch-action:none is set, which would otherwise fight with our own
+   pan/zoom handling on the canvas. Double-tap-zoom itself is already handled
+   by touch-action:manipulation (buttons/inputs) and touch-action:none
+   (canvas) in CSS — those suppress the zoom while still letting the browser
+   synthesize normal click/dblclick events, which a manual touchend
+   preventDefault() would otherwise also cancel. */
 ['gesturestart','gesturechange','gestureend'].forEach(evt=>{
   document.addEventListener(evt, e=>e.preventDefault());
 });
-let _lastTouchEnd = 0;
-document.addEventListener('touchend', e=>{
-  const now = Date.now();
-  if(now - _lastTouchEnd < 350) e.preventDefault();
-  _lastTouchEnd = now;
-}, {passive:false});
 document.addEventListener('contextmenu', e=>e.preventDefault());
 
 function toast(msg){
@@ -535,6 +533,8 @@ class Engine{
     this.color = '#262A22';
     this.size = 6;
     this.selectedIndex = -1;
+    this.selectedIndices = new Set(); // multi-selection, used by the lasso tool
+    this.lassoPoints = null;          // in-progress freeform lasso path (world coords)
     this.drawingStroke = null;
     this.dragMode = null; // 'move' | 'resize'
     this.dragStart = null;
@@ -583,6 +583,7 @@ class Engine{
     this.items = this.history.pop();
     this.ensureImagesLoaded();
     this.selectedIndex=-1;
+    this.selectedIndices = new Set();
     this.requestRender();
     this.onChange();
   }
@@ -601,6 +602,8 @@ class Engine{
   reset(){
     this.items = [];
     this.selectedIndex = -1;
+    this.selectedIndices = new Set();
+    this.lassoPoints = null;
     this.history = [];
     this.view = {x:-360,y:-260,scale:1};
     this.requestRender();
@@ -610,6 +613,8 @@ class Engine{
     this.items = cloneItemsForStorage(items);
     this.ensureImagesLoaded();
     this.selectedIndex = -1;
+    this.selectedIndices = new Set();
+    this.lassoPoints = null;
     this.history = [];
     const bbox = computeBBox(this.items);
     if(bbox){
@@ -625,6 +630,80 @@ class Engine{
     this.requestRender();
   }
 
+  getSelectionIndices(){
+    if(this.selectedIndices.size) return [...this.selectedIndices];
+    return this.selectedIndex>=0 ? [this.selectedIndex] : [];
+  }
+
+  clearSelection(){
+    this.selectedIndices = new Set();
+    this.selectedIndex = -1;
+  }
+
+  itemBBox(it){
+    if(it.type==='stroke'){
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      const pad = it.size/2;
+      for(const p of it.points){
+        minX=Math.min(minX,p[0]-pad); minY=Math.min(minY,p[1]-pad);
+        maxX=Math.max(maxX,p[0]+pad); maxY=Math.max(maxY,p[1]+pad);
+      }
+      return {minX,minY,maxX,maxY};
+    }
+    return {minX:it.x, minY:it.y, maxX:it.x+it.w, maxY:it.y+it.h};
+  }
+
+  duplicateSelection(){
+    const idxs = this.getSelectionIndices();
+    if(!idxs.length) return false;
+    this.pushHistory();
+    const offset = 26;
+    const newIdxs = [];
+    idxs.forEach(i=>{
+      const src = this.items[i];
+      if(!src) return;
+      const clone = JSON.parse(JSON.stringify(src, (k,v)=> k==='__img' ? undefined : v));
+      if(clone.type==='stroke'){
+        clone.points = clone.points.map(p=>[p[0]+offset, p[1]+offset]);
+      } else if(clone.type==='image'){
+        clone.x += offset; clone.y += offset;
+        const img = new Image();
+        img.onload = ()=> this.requestRender();
+        img.src = clone.src;
+        clone.__img = img;
+      }
+      this.items.push(clone);
+      newIdxs.push(this.items.length-1);
+    });
+    this.selectedIndices = new Set(newIdxs);
+    this.selectedIndex = newIdxs.length===1 ? newIdxs[0] : -1;
+    this.requestRender();
+    this.onChange();
+    return true;
+  }
+
+  deleteSelection(){
+    const idxs = this.getSelectionIndices();
+    if(!idxs.length) return false;
+    this.pushHistory();
+    const idxSet = new Set(idxs);
+    this.items = this.items.filter((_,i)=>!idxSet.has(i));
+    this.clearSelection();
+    this.requestRender();
+    this.onChange();
+    return true;
+  }
+
+  pointInPolygon(x,y,poly){
+    let inside=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+      const hit = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+      if(hit) inside=!inside;
+    }
+    return inside;
+  }
+
   addImageItem(cardData, screenCenter){
     this.pushHistory();
     const aspect = cardData.h / cardData.w;
@@ -638,15 +717,6 @@ class Engine{
     item.__img = img;
     this.items.push(item);
     this.selectedIndex = this.items.length-1;
-    this.requestRender();
-    this.onChange();
-  }
-
-  deleteSelected(){
-    if(this.selectedIndex<0) return;
-    this.pushHistory();
-    this.items.splice(this.selectedIndex,1);
-    this.selectedIndex=-1;
     this.requestRender();
     this.onChange();
   }
@@ -679,8 +749,9 @@ class Engine{
     c.addEventListener('wheel', e=>this.onWheel(e), {passive:false});
     window.addEventListener('keydown', e=>{
       if(e.code==='Space') this.spaceDown = true;
-      if((e.key==='Delete'||e.key==='Backspace') && this.selectedIndex>=0 && document.activeElement.tagName!=='INPUT'){
-        this.deleteSelected();
+      if((e.key==='Delete'||e.key==='Backspace') && this.getSelectionIndices().length && document.activeElement.tagName!=='INPUT'){
+        e.preventDefault();
+        this.deleteSelection();
       }
     });
     window.addEventListener('keyup', e=>{ if(e.code==='Space') this.spaceDown=false; });
@@ -742,6 +813,7 @@ class Engine{
         return;
       }
       const hit = this.hitTestImage(w.x,w.y);
+      this.selectedIndices = new Set();
       this.selectedIndex = hit;
       if(hit>=0){
         this.dragMode='move';
@@ -749,6 +821,30 @@ class Engine{
         this.dragStart={wx:w.x,wy:w.y,ox:this.items[hit].x,oy:this.items[hit].y};
         this.pushHistory();
       }
+      this.requestRender();
+      return;
+    }
+
+    if(this.tool==='lasso'){
+      const sel = this.getSelectionIndices();
+      const hitSel = sel.find(i=>{
+        const it=this.items[i]; if(!it) return false;
+        const bb=this.itemBBox(it);
+        return w.x>=bb.minX && w.x<=bb.maxX && w.y>=bb.minY && w.y<=bb.maxY;
+      });
+      if(hitSel!==undefined){
+        // dragging inside the existing selection moves the whole group instead of re-lassoing
+        this.dragMode='moveGroup';
+        this.dragPointerId = e.pointerId;
+        this.dragStart = {
+          wx:w.x, wy:w.y,
+          snapshot: sel.map(i=>({ i, it: JSON.parse(JSON.stringify(this.items[i], (k,v)=> k==='__img'?undefined:v)) }))
+        };
+        this.pushHistory();
+        return;
+      }
+      this.lassoPoints = [[w.x,w.y]];
+      this.lassoPointerId = e.pointerId;
       this.requestRender();
       return;
     }
@@ -807,6 +903,28 @@ class Engine{
       this.requestRender();
       return;
     }
+    if(this.dragMode==='moveGroup' && e.pointerId===this.dragPointerId){
+      const dx = w.x - this.dragStart.wx;
+      const dy = w.y - this.dragStart.wy;
+      this.dragStart.snapshot.forEach(({i,it})=>{
+        const cur = this.items[i];
+        if(!cur) return;
+        if(it.type==='stroke') cur.points = it.points.map(p=>[p[0]+dx, p[1]+dy]);
+        else if(it.type==='image'){ cur.x = it.x+dx; cur.y = it.y+dy; }
+      });
+      this.requestRender();
+      return;
+    }
+
+    if(this.lassoPoints && e.pointerId===this.lassoPointerId){
+      const pts = this.lassoPoints;
+      const last = pts[pts.length-1];
+      if(Math.hypot(w.x-last[0], w.y-last[1]) > 1/this.view.scale){
+        pts.push([w.x,w.y]);
+        this.requestRender();
+      }
+      return;
+    }
 
     if(this.drawingStroke && e.pointerId===this.strokePointerId){
       const pts = this.drawingStroke.points;
@@ -843,6 +961,35 @@ class Engine{
       }
       this.drawingStroke = null;
       this.strokePointerId = null;
+      this.requestRender();
+    }
+    if(this.lassoPoints && e.pointerId===this.lassoPointerId){
+      const pts = this.lassoPoints;
+      if(!cancelled){
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        for(const p of pts){ minX=Math.min(minX,p[0]); minY=Math.min(minY,p[1]); maxX=Math.max(maxX,p[0]); maxY=Math.max(maxY,p[1]); }
+        const tiny = Math.max(maxX-minX, maxY-minY) < 5/this.view.scale;
+        const newSel = new Set();
+        if(tiny){
+          // a tap rather than a drag — select whichever item is under that point
+          const [tx,ty] = pts[0];
+          for(let i=this.items.length-1;i>=0;i--){
+            const bb=this.itemBBox(this.items[i]);
+            if(tx>=bb.minX && tx<=bb.maxX && ty>=bb.minY && ty<=bb.maxY){ newSel.add(i); break; }
+          }
+        } else {
+          const poly = pts.length>2 ? pts : [pts[0],[maxX,minY],pts[pts.length-1],[minX,maxY]];
+          this.items.forEach((it,i)=>{
+            const bb=this.itemBBox(it);
+            const cx=(bb.minX+bb.maxX)/2, cy=(bb.minY+bb.maxY)/2;
+            if(this.pointInPolygon(cx,cy,poly)) newSel.add(i);
+          });
+        }
+        this.selectedIndices = newSel;
+        this.selectedIndex = newSel.size===1 ? [...newSel][0] : -1;
+      }
+      this.lassoPoints = null;
+      this.lassoPointerId = null;
       this.requestRender();
     }
   }
@@ -886,17 +1033,44 @@ class Engine{
     drawItemsOnCtx(ctx, this.items);
     if(this.drawingStroke) drawItemsOnCtx(ctx, [this.drawingStroke]);
 
-    if(this.selectedIndex>=0 && this.items[this.selectedIndex] && this.items[this.selectedIndex].type==='image'){
-      const it = this.items[this.selectedIndex];
+    const selIdxs = this.getSelectionIndices();
+    if(selIdxs.length){
       ctx.save();
       ctx.strokeStyle = '#4E6E56';
       ctx.lineWidth = 1.6/this.view.scale;
       ctx.setLineDash([6/this.view.scale,4/this.view.scale]);
-      ctx.strokeRect(it.x,it.y,it.w,it.h);
+      selIdxs.forEach(i=>{
+        const it = this.items[i];
+        if(!it) return;
+        const bb = this.itemBBox(it);
+        ctx.strokeRect(bb.minX, bb.minY, bb.maxX-bb.minX, bb.maxY-bb.minY);
+      });
       ctx.setLineDash([]);
-      ctx.fillStyle='#4E6E56';
-      const hs = 6/this.view.scale;
-      ctx.fillRect(it.x+it.w-hs, it.y+it.h-hs, hs*2, hs*2);
+      // the drag-to-resize handle only makes sense for a single image picked with the select tool
+      if(this.selectedIndex>=0 && this.selectedIndices.size===0){
+        const it = this.items[this.selectedIndex];
+        if(it && it.type==='image'){
+          ctx.fillStyle='#4E6E56';
+          const hs = 6/this.view.scale;
+          ctx.fillRect(it.x+it.w-hs, it.y+it.h-hs, hs*2, hs*2);
+        }
+      }
+      ctx.restore();
+    }
+
+    if(this.lassoPoints && this.lassoPoints.length>1){
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(this.lassoPoints[0][0], this.lassoPoints[0][1]);
+      for(let i=1;i<this.lassoPoints.length;i++) ctx.lineTo(this.lassoPoints[i][0], this.lassoPoints[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(176,124,34,0.14)';
+      ctx.fill();
+      ctx.strokeStyle = '#B07C22';
+      ctx.lineWidth = 1.4/this.view.scale;
+      ctx.setLineDash([5/this.view.scale,4/this.view.scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
     }
   }
@@ -913,7 +1087,10 @@ const ICONS = {
   undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
   clear:'<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>',
   reset:'<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>',
-  edit:'<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
+  edit:'<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  lasso:'<svg viewBox="0 0 24 24"><path d="M12 3C7.3 3 3 5.9 3 9.8c0 3.2 2.8 5.6 6.3 6.1L8 20l3-2.3c.3 0 .6.1 1 .1 4.7 0 9-2.9 9-6.8S16.7 3 12 3z"/><circle cx="8" cy="16.3" r="1.3" fill="currentColor" stroke="none"/></svg>',
+  duplicate:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1"/></svg>',
+  deleteSel:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>'
 };
 const COLORS = ['#262A22','#A8412B','#B07C22','#4E6E56','#3A5A78','#EAE7DA'];
 const swatchButtonRegistry = []; // {btn, index} across both toolbars, kept in sync when a default color is customized
@@ -952,16 +1129,35 @@ function buildToolbar(el, engine, opts){
   const buttons = {};
   buttons.pen = toolBtn('pen', ICONS.pen, 'Pen');
   buttons.eraser = toolBtn('eraser', ICONS.eraser, 'Eraser');
-  if(opts.allowSelect) buttons.select = toolBtn('select', ICONS.select, 'Select / move / resize');
+  buttons.lasso = toolBtn('lasso', ICONS.lasso, 'Lasso select — drag a loop, then move, copy, or delete it');
+  if(opts.allowSelect) buttons.select = toolBtn('select', ICONS.select, 'Select / move / resize a single image');
   buttons.pan = toolBtn('pan', ICONS.pan, 'Pan (or hold space)');
 
   function setTool(name){
     engine.tool = name;
     Object.entries(buttons).forEach(([k,b])=> b.classList.toggle('active', k===name));
     engine.canvas.classList.toggle('tool-pan', name==='pan');
-    engine.canvas.classList.toggle('tool-select', name==='select');
+    engine.canvas.classList.toggle('tool-select', name==='select' || name==='lasso');
+    if(name!=='lasso' && name!=='select'){
+      engine.clearSelection();
+      engine.requestRender();
+    }
   }
   setTool('pen');
+
+  const sep1b=document.createElement('div'); sep1b.className='tool-sep'; el.appendChild(sep1b);
+  const dupBtn=document.createElement('button');
+  dupBtn.className='tool-btn'; dupBtn.title='Duplicate selection'; dupBtn.innerHTML=ICONS.duplicate;
+  dupBtn.addEventListener('click', ()=>{
+    if(!engine.duplicateSelection()) toast('Lasso-select something first');
+  });
+  el.appendChild(dupBtn);
+  const delSelBtn=document.createElement('button');
+  delSelBtn.className='tool-btn'; delSelBtn.title='Delete selection'; delSelBtn.innerHTML=ICONS.deleteSel;
+  delSelBtn.addEventListener('click', ()=>{
+    if(!engine.deleteSelection()) toast('Lasso-select something first');
+  });
+  el.appendChild(delSelBtn);
 
   const sep1=document.createElement('div'); sep1.className='tool-sep'; el.appendChild(sep1);
 

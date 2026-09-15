@@ -25,6 +25,12 @@ The six default brush-color swatches in the toolbar are yours to customize:
 double-click one to pick a new color for it — it replaces that swatch and
 stays there for every vault, until you change it again.
 
+Both canvases also have a **lasso tool**: drag a loop around any drawn
+strokes (or, on the Concepts canvas, placed cards too) to select them, then
+drag the selection to move it, or use the toolbar's duplicate/delete buttons
+on it. A single tap with the lasso tool selects just what's under your
+finger.
+
 It's a single self-contained HTML file — no build step, no server, no
 external dependencies.
 
