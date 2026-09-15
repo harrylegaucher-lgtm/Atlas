@@ -6,7 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
 <meta name="theme-color" content="#262A22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <title>Atlas — a museum of your drawings</title>
 <style>
   :root{
@@ -50,7 +54,66 @@
     font-size:16px; /* prevents iOS Safari auto-zoom on focus */
   }
   button{ touch-action:manipulation; }
-  #app{height:100%;display:flex;flex-direction:column;}
+  #app{height:100%;position:relative;}
+  #mainApp{height:100%;display:flex;flex-direction:column;}
+  #mainApp.hidden{display:none;}
+
+  /* ---------- vault picker ---------- */
+  #vaultPicker{
+    height:100%;overflow-y:auto;background:var(--paper-darker);
+    display:flex;align-items:flex-start;justify-content:center;
+    padding:60px 24px;padding-top:max(60px, env(safe-area-inset-top));
+  }
+  #vaultPicker.hidden{display:none;}
+  .vpInner{width:100%;max-width:620px;}
+  .vpBrand{
+    font-family:Georgia,"Iowan Old Style",serif;font-size:30px;font-weight:600;color:var(--ink);
+    display:flex;align-items:baseline;gap:11px;margin-bottom:6px;
+  }
+  .vpBrand small{font-family:inherit;font-weight:400;font-size:14px;color:var(--ink-soft);}
+  .vpSub{font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin:0 0 26px;max-width:480px;}
+  .vpGrid{display:flex;flex-direction:column;gap:10px;margin-bottom:22px;}
+  .vaultTile{
+    background:var(--paper);border:1px solid var(--line-strong);border-radius:11px;
+    padding:16px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;
+  }
+  .vaultTile:hover{border-color:var(--ink);}
+  .vaultTile .vMark{
+    width:40px;height:40px;border-radius:9px;background:var(--ink);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:17px;font-weight:700;flex:0 0 auto;
+  }
+  .vaultTile .vInfo{flex:1;min-width:0;}
+  .vaultTile .vName{font-family:Georgia,"Iowan Old Style",serif;font-size:16.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .vaultTile .vMeta{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .vaultTile .vActions{display:flex;gap:6px;flex:0 0 auto;}
+  .vaultTile .vActions button{
+    width:32px;height:32px;border-radius:8px;border:1px solid var(--line-strong);background:var(--paper);
+    color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .vaultTile .vActions button:hover{background:var(--paper-darker);color:var(--ink);}
+  .vaultTile .vActions button.danger:hover{color:#fff;background:var(--rust);border-color:var(--rust);}
+  .vaultTile .vActions svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .vpEmpty{font-size:13px;color:var(--ink-soft);padding:8px 2px 20px;}
+  .vpNewBtn{width:100%;padding:13px;font-size:14px;}
+
+  /* ---------- tags ---------- */
+  .tagsRow{display:flex;flex-wrap:wrap;gap:5px;}
+  .tagChip{
+    display:inline-flex;align-items:center;gap:5px;background:var(--paper);border:1px solid var(--line-strong);
+    border-radius:12px;padding:3px 5px 3px 10px;font-size:11.5px;color:var(--ink);
+  }
+  .tagChip button{
+    width:15px;height:15px;border:none;background:rgba(38,42,34,0.1);border-radius:50%;color:var(--ink-soft);
+    cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;
+  }
+  .tagChip button:hover{background:var(--rust);color:#fff;}
+  input.tagInput{
+    font-size:16px;border:1px dashed var(--line-strong);border-radius:8px;background:transparent;
+    padding:6px 9px;color:var(--ink);font-family:inherit;
+  }
+  input.tagInput:focus{outline:none;border-color:var(--ink);border-style:solid;}
+  .tileTags{display:flex;flex-wrap:wrap;gap:3px;margin-top:2px;}
+  .tileTag{font-size:9.5px;color:var(--ink-soft);background:var(--paper-darker);border-radius:8px;padding:1px 6px;}
 
   /* ---------- header ---------- */
   header{
@@ -69,7 +132,9 @@
     font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;
     font-size:20px;letter-spacing:0.3px;font-weight:600;
     display:flex;align-items:baseline;gap:9px;
+    background:none;border:none;padding:0;color:inherit;cursor:pointer;
   }
+  .brand:hover small{color:#fff;}
   .brand small{font-family:inherit;font-weight:400;font-size:12px;color:#B9B6A6;letter-spacing:0.2px;}
   nav.tabs{display:flex;gap:2px;margin-left:8px;}
   nav.tabs button{
@@ -196,10 +261,12 @@
   .cardTile .meta .d{font-size:10.5px;color:var(--ink-soft);}
   .cardTile .del{
     opacity:0;width:20px;height:20px;border:none;background:transparent;color:var(--rust);
-    cursor:pointer;flex:0 0 auto;border-radius:5px;
+    cursor:pointer;flex:0 0 auto;border-radius:5px;font-size:12px;
   }
+  .cardTile .del.rename{color:var(--ink-soft);}
   .cardTile:hover .del{opacity:0.7;}
   .cardTile .del:hover{opacity:1;background:rgba(168,65,43,0.12);}
+  .cardTile .del.rename:hover{background:rgba(38,42,34,0.1);}
   .empty{padding:18px 6px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
 
   /* insert grid for concepts tab */
@@ -232,70 +299,86 @@
 </head>
 <body>
 <div id="app">
-  <header>
-    <div class="brand">Atlas <small>draw · name · collect · combine</small></div>
-    <nav class="tabs">
-      <button id="tabCards" class="active">Cards</button>
-      <button id="tabConcepts">Concepts</button>
-    </nav>
-    <div class="headSpacer"></div>
-    <div class="toast" id="toast"></div>
-  </header>
 
-  <main>
-    <!-- ===================== CARDS TAB ===================== -->
-    <section id="cardsView" class="view">
-      <div class="toolbar" id="cardsToolbar"></div>
-      <div class="canvasWrap">
-        <canvas id="cardsCanvas"></canvas>
-        <div class="hint" id="cardsHint">Draw anywhere — scroll to zoom, hold space to pan</div>
-      </div>
-      <aside class="sidebar">
-        <div class="nameRow">
-          <input id="cardsName" type="text" placeholder="Name this sketch…" maxlength="40">
-          <div class="versionRow" id="cardsVersions"></div>
-          <div class="rowBtns">
-            <button class="btn primary" id="cardsSave">Add to atlas</button>
-            <button class="btn ghost" id="cardsNew">New</button>
-          </div>
-        </div>
-        <div class="subsection" style="border-top:none;">
-          <h3>Your cards</h3>
-          <div class="searchRow"><input id="cardsSearch" type="text" placeholder="Search cards…"></div>
-          <div class="list" id="cardsList"></div>
-        </div>
-      </aside>
-    </section>
+  <!-- ===================== VAULT PICKER ===================== -->
+  <section id="vaultPicker">
+    <div class="vpInner">
+      <div class="vpBrand">Atlas <small>draw · name · collect · combine</small></div>
+      <p class="vpSub">Choose a vault to enter. Each vault keeps its own cards and concepts, completely separate from the others.</p>
+      <div class="vpGrid" id="vaultGrid"></div>
+      <button class="btn primary vpNewBtn" id="vaultCreateBtn">+ New vault</button>
+    </div>
+  </section>
 
-    <!-- ===================== CONCEPTS TAB ===================== -->
-    <section id="conceptsView" class="view hidden accentUse">
-      <div class="toolbar" id="conceptsToolbar"></div>
-      <div class="canvasWrap">
-        <canvas id="conceptsCanvas"></canvas>
-        <div class="hint" id="conceptsHint">Click a card to place it, then draw between them</div>
-      </div>
-      <aside class="sidebar">
-        <div class="nameRow">
-          <input id="conceptsName" type="text" placeholder="Name this concept…" maxlength="40">
-          <div class="versionRow" id="conceptsVersions"></div>
-          <div class="rowBtns">
-            <button class="btn primary" id="conceptsSave">Add to concepts</button>
-            <button class="btn ghost" id="conceptsNew">New</button>
+  <!-- ===================== MAIN APP ===================== -->
+  <div id="mainApp" class="hidden">
+    <header>
+      <button id="vaultSwitchBtn" class="brand" title="Switch vault">Atlas <small id="vaultLabel">draw · name · collect · combine</small></button>
+      <nav class="tabs">
+        <button id="tabCards" class="active">Cards</button>
+        <button id="tabConcepts">Concepts</button>
+      </nav>
+      <div class="headSpacer"></div>
+      <div class="toast" id="toast"></div>
+    </header>
+
+    <main>
+      <!-- ===================== CARDS TAB ===================== -->
+      <section id="cardsView" class="view">
+        <div class="toolbar" id="cardsToolbar"></div>
+        <div class="canvasWrap">
+          <canvas id="cardsCanvas"></canvas>
+          <div class="hint" id="cardsHint">Draw anywhere — scroll to zoom, hold space to pan</div>
+        </div>
+        <aside class="sidebar">
+          <div class="nameRow">
+            <input id="cardsName" type="text" placeholder="Name this sketch…" maxlength="40">
+            <div class="versionRow" id="cardsVersions"></div>
+            <div class="tagsRow" id="cardsTags"></div>
+            <input id="cardsTagInput" type="text" placeholder="add a tag, press Enter…" class="tagInput">
+            <div class="rowBtns">
+              <button class="btn primary" id="cardsSave">Add to atlas</button>
+              <button class="btn ghost" id="cardsNew">New</button>
+            </div>
           </div>
+          <div class="subsection" style="border-top:none;">
+            <h3>Your cards</h3>
+            <div class="searchRow"><input id="cardsSearch" type="text" placeholder="Search cards, or #tag…"></div>
+            <div class="list" id="cardsList"></div>
+          </div>
+        </aside>
+      </section>
+
+      <!-- ===================== CONCEPTS TAB ===================== -->
+      <section id="conceptsView" class="view hidden accentUse">
+        <div class="toolbar" id="conceptsToolbar"></div>
+        <div class="canvasWrap">
+          <canvas id="conceptsCanvas"></canvas>
+          <div class="hint" id="conceptsHint">Click a card to place it, then draw between them</div>
         </div>
-        <div class="subsection" style="flex:1;border-top:none;">
-          <h3>Insert a card</h3>
-          <div class="searchRow"><input id="insertSearch" type="text" placeholder="Search your cards…"></div>
-          <div class="insertGrid" id="insertGrid" style="flex:1;"></div>
-        </div>
-        <div class="subsection" style="flex:1;">
-          <h3>Concepts</h3>
-          <div class="searchRow"><input id="conceptsSearch" type="text" placeholder="Search concepts…"></div>
-          <div class="list" id="conceptsList" style="flex:1;"></div>
-        </div>
-      </aside>
-    </section>
-  </main>
+        <aside class="sidebar">
+          <div class="nameRow">
+            <input id="conceptsName" type="text" placeholder="Name this concept…" maxlength="40">
+            <div class="versionRow" id="conceptsVersions"></div>
+            <div class="rowBtns">
+              <button class="btn primary" id="conceptsSave">Add to concepts</button>
+              <button class="btn ghost" id="conceptsNew">New</button>
+            </div>
+          </div>
+          <div class="subsection" style="flex:1;border-top:none;">
+            <h3>Insert a card</h3>
+            <div class="searchRow"><input id="insertSearch" type="text" placeholder="Search your cards, or #tag…"></div>
+            <div class="insertGrid" id="insertGrid" style="flex:1;"></div>
+          </div>
+          <div class="subsection" style="flex:1;">
+            <h3>Concepts</h3>
+            <div class="searchRow"><input id="conceptsSearch" type="text" placeholder="Search concepts…"></div>
+            <div class="list" id="conceptsList" style="flex:1;"></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
 </div>
 
 <script>
@@ -457,6 +540,10 @@ class Engine{
     this.dragStart = null;
     this.pointers = new Map();
     this.pinchStart = null;
+    this.strokePointerId = null;   // pointer currently driving drawingStroke
+    this.panPointerId = null;      // pointer currently driving a pan
+    this.dragPointerId = null;     // pointer currently driving a select move/resize
+    this.activePenPointerId = null; // Apple Pencil pointer currently down (for palm rejection)
     this.history = [];
     this._raf = null;
 
@@ -585,6 +672,10 @@ class Engine{
     c.addEventListener('pointerdown', e=>this.onPointerDown(e));
     c.addEventListener('pointermove', e=>this.onPointerMove(e));
     window.addEventListener('pointerup', e=>this.onPointerUp(e));
+    // iPadOS fires pointercancel (not pointerup) for touches it rejects as a palm while
+    // Apple Pencil is in use. If we don't handle it, that pointer's id is never removed
+    // from our tracking, permanently miscounting touches and locking out future drawing.
+    window.addEventListener('pointercancel', e=>this.onPointerUp(e, true));
     c.addEventListener('wheel', e=>this.onWheel(e), {passive:false});
     window.addEventListener('keydown', e=>{
       if(e.code==='Space') this.spaceDown = true;
@@ -595,21 +686,38 @@ class Engine{
     window.addEventListener('keyup', e=>{ if(e.code==='Space') this.spaceDown=false; });
   }
 
+  touchPointerCount(){
+    let n=0;
+    for(const p of this.pointers.values()) if(p.type==='touch') n++;
+    return n;
+  }
+
   currentModeIsPan(e){
-    return this.tool==='pan' || this.spaceDown || e.button===1 || (e.pointerType==='touch' && this.pointers.size>=2);
+    return this.tool==='pan' || this.spaceDown || e.button===1 || (e.pointerType==='touch' && this.touchPointerCount()>=2);
   }
 
   onPointerDown(e){
-    this.canvas.setPointerCapture(e.pointerId);
-    this.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
-    this.hintEl && (this.hintEl.style.opacity='0');
+    // Palm rejection: while an Apple Pencil stroke is actively down, ignore every touch
+    // pointer entirely (don't capture it, don't track it, don't let it become a second
+    // "finger" for pinch/pan). This is what stops a resting palm from hijacking the stroke.
+    if(e.pointerType==='touch' && this.activePenPointerId!==null){
+      e.preventDefault();
+      return;
+    }
 
-    if(this.pointers.size>=2){
-      this.drawingStroke = null;
-      const pts = [...this.pointers.values()];
+    try{ this.canvas.setPointerCapture(e.pointerId); }catch(err){}
+    this.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY,type:e.pointerType});
+    this.hintEl && (this.hintEl.style.opacity='0');
+    if(e.pointerType==='pen') this.activePenPointerId = e.pointerId;
+
+    if(this.touchPointerCount()>=2){
+      // a genuine two-finger touch gesture — discard any in-progress stroke/drag first
+      this.drawingStroke = null; this.strokePointerId = null;
+      this.dragMode = null; this.dragPointerId = null;
+      const touchPts = [...this.pointers.values()].filter(p=>p.type==='touch');
       this.pinchStart = {
-        d: Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y),
-        mid: {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2},
+        d: Math.hypot(touchPts[0].x-touchPts[1].x, touchPts[0].y-touchPts[1].y),
+        mid: {x:(touchPts[0].x+touchPts[1].x)/2, y:(touchPts[0].y+touchPts[1].y)/2},
         view: {...this.view}
       };
       return;
@@ -617,6 +725,7 @@ class Engine{
 
     if(this.currentModeIsPan(e)){
       this.isPanning = true;
+      this.panPointerId = e.pointerId;
       this.panStart = {x:e.clientX,y:e.clientY, view:{...this.view}};
       this.canvas.classList.add('panning');
       return;
@@ -627,6 +736,7 @@ class Engine{
     if(this.tool==='select' && this.allowImages){
       if(this.hitTestHandle(w.x,w.y)){
         this.dragMode='resize';
+        this.dragPointerId = e.pointerId;
         this.dragStart={wx:w.x,wy:w.y,item:{...this.items[this.selectedIndex]}};
         this.pushHistory();
         return;
@@ -635,6 +745,7 @@ class Engine{
       this.selectedIndex = hit;
       if(hit>=0){
         this.dragMode='move';
+        this.dragPointerId = e.pointerId;
         this.dragStart={wx:w.x,wy:w.y,ox:this.items[hit].x,oy:this.items[hit].y};
         this.pushHistory();
       }
@@ -643,18 +754,19 @@ class Engine{
     }
 
     if(this.tool==='pen' || this.tool==='eraser'){
+      this.strokePointerId = e.pointerId;
       this.drawingStroke = { type:'stroke', color:this.color, size:this.size, mode: this.tool==='eraser'?'erase':'draw', points:[[w.x,w.y]] };
       this.requestRender();
     }
   }
 
   onPointerMove(e){
-    if(this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType});
 
-    if(this.pointers.size>=2 && this.pinchStart){
-      const pts=[...this.pointers.values()];
-      const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      const mid = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    if(this.touchPointerCount()>=2 && this.pinchStart){
+      const touchPts=[...this.pointers.values()].filter(p=>p.type==='touch');
+      const d = Math.hypot(touchPts[0].x-touchPts[1].x, touchPts[0].y-touchPts[1].y);
+      const mid = {x:(touchPts[0].x+touchPts[1].x)/2, y:(touchPts[0].y+touchPts[1].y)/2};
       const factor = d/(this.pinchStart.d||1);
       const newScale = clamp(this.pinchStart.view.scale*factor, 0.05, 8);
       const rect = this.canvas.getBoundingClientRect();
@@ -667,7 +779,7 @@ class Engine{
       return;
     }
 
-    if(this.isPanning){
+    if(this.isPanning && e.pointerId===this.panPointerId){
       const dx = (e.clientX-this.panStart.x)/this.view.scale;
       const dy = (e.clientY-this.panStart.y)/this.view.scale;
       this.view.x = this.panStart.view.x - dx;
@@ -678,14 +790,14 @@ class Engine{
 
     const w = this.screenToWorld(e.clientX,e.clientY);
 
-    if(this.dragMode==='move' && this.selectedIndex>=0){
+    if(this.dragMode==='move' && e.pointerId===this.dragPointerId && this.selectedIndex>=0){
       const it = this.items[this.selectedIndex];
       it.x = this.dragStart.ox + (w.x-this.dragStart.wx);
       it.y = this.dragStart.oy + (w.y-this.dragStart.wy);
       this.requestRender();
       return;
     }
-    if(this.dragMode==='resize' && this.selectedIndex>=0){
+    if(this.dragMode==='resize' && e.pointerId===this.dragPointerId && this.selectedIndex>=0){
       const it = this.items[this.selectedIndex];
       const orig = this.dragStart.item;
       const aspect = orig.h/orig.w;
@@ -696,7 +808,7 @@ class Engine{
       return;
     }
 
-    if(this.drawingStroke){
+    if(this.drawingStroke && e.pointerId===this.strokePointerId){
       const pts = this.drawingStroke.points;
       const last = pts[pts.length-1];
       if(Math.hypot(w.x-last[0], w.y-last[1]) > 0.6/this.view.scale){
@@ -706,24 +818,31 @@ class Engine{
     }
   }
 
-  onPointerUp(e){
+  onPointerUp(e, cancelled){
     this.pointers.delete(e.pointerId);
-    if(this.pointers.size<2) this.pinchStart=null;
-    if(this.isPanning){
+    if(e.pointerId===this.activePenPointerId) this.activePenPointerId = null;
+    if(this.touchPointerCount()<2) this.pinchStart=null;
+
+    if(this.isPanning && e.pointerId===this.panPointerId){
       this.isPanning=false;
+      this.panPointerId=null;
       this.canvas.classList.remove('panning');
     }
-    if(this.dragMode){
+    if(this.dragMode && e.pointerId===this.dragPointerId){
       this.dragMode=null;
+      this.dragPointerId=null;
       this.onChange();
     }
-    if(this.drawingStroke){
-      if(this.drawingStroke.points.length>0){
+    if(this.drawingStroke && e.pointerId===this.strokePointerId){
+      // a cancelled pointer (e.g. iOS rejecting a palm touch) means this stroke was
+      // never valid input — discard it instead of saving a stray mark.
+      if(!cancelled && this.drawingStroke.points.length>0){
         this.pushHistory();
         this.items.push(this.drawingStroke);
         this.onChange();
       }
       this.drawingStroke = null;
+      this.strokePointerId = null;
       this.requestRender();
     }
   }
@@ -793,7 +912,8 @@ const ICONS = {
   select:'<svg viewBox="0 0 24 24"><path d="M4 3l7 18 2.5-7.5L21 11 4 3z"/></svg>',
   undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
   clear:'<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>',
-  reset:'<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>'
+  reset:'<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  edit:'<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
 };
 const COLORS = ['#262A22','#A8412B','#B07C22','#4E6E56','#3A5A78','#EAE7DA'];
 
@@ -889,15 +1009,20 @@ function buildToolbar(el, engine, opts){
    App state + persistence
 ============================================================ */
 const State = {
+  vaultsIndex: [],
+  currentVaultId: null,
   cardsIndex: [],
   conceptsIndex: [],
   editingCardId: null,
   editingConceptId: null,
-  cardManifest: null,       // full {id,createdAt,updatedAt,versions:[...]} for the open card
+  cardManifest: null,       // full {id,name,tags,createdAt,updatedAt,versions:[...]} for the open card
   currentCardVersionIndex: -1,
   conceptManifest: null,
   currentConceptVersionIndex: -1,
+  cardsEditorTags: [],      // tags currently shown in the cards-tab tag editor
 };
+
+function vaultKey(key){ return 'vault:'+State.currentVaultId+':'+key; }
 
 function renderVersionChips(kind){
   const manifest = kind==='cards' ? State.cardManifest : State.conceptManifest;
@@ -914,7 +1039,7 @@ function renderVersionChips(kind){
     const chip=document.createElement('button');
     chip.className='verChip'+(i===curIdx?' active':'')+(i===manifest.versions.length-1?' latest':'');
     chip.textContent = v.v;
-    chip.title = v.name+' — '+new Date(v.savedAt).toLocaleString();
+    chip.title = new Date(v.savedAt).toLocaleString();
     chip.addEventListener('click', ()=>{
       if(kind==='cards') loadCardVersion(i); else loadConceptVersion(i);
     });
@@ -922,13 +1047,55 @@ function renderVersionChips(kind){
   });
 }
 
-async function loadIndexes(){
-  State.cardsIndex = (await storeGet('cards-index')) || [];
-  State.conceptsIndex = (await storeGet('concepts-index')) || [];
+async function loadVaultData(){
+  State.cardsIndex = (await storeGet(vaultKey('cards-index'))) || [];
+  State.conceptsIndex = (await storeGet(vaultKey('concepts-index'))) || [];
 }
 
-async function saveCardsIndex(){ await storeSet('cards-index', State.cardsIndex); }
-async function saveConceptsIndex(){ await storeSet('concepts-index', State.conceptsIndex); }
+async function saveCardsIndex(){ await storeSet(vaultKey('cards-index'), State.cardsIndex); }
+async function saveConceptsIndex(){ await storeSet(vaultKey('concepts-index'), State.conceptsIndex); }
+
+/* ---------------- tag helpers ---------------- */
+function normalizeTag(raw){
+  return raw.trim().toLowerCase().replace(/^#+/,'').replace(/\s+/g,'-').slice(0,24);
+}
+function parseSearchQuery(q){
+  const tokens = q.trim().split(/\s+/).filter(Boolean);
+  const tags = [];
+  const text = [];
+  for(const t of tokens){
+    if(t[0]==='#' && t.length>1) tags.push(normalizeTag(t));
+    else text.push(t.toLowerCase());
+  }
+  return { tags, text: text.join(' ') };
+}
+function cardMatchesQuery(card, parsed){
+  if(parsed.tags.length){
+    const cardTags = (card.tags||[]).map(t=>t.toLowerCase());
+    for(const t of parsed.tags) if(!cardTags.includes(t)) return false;
+  }
+  if(parsed.text && !card.name.toLowerCase().includes(parsed.text)) return false;
+  return true;
+}
+
+function renderTagEditor(){
+  const container = document.getElementById('cardsTags');
+  container.innerHTML='';
+  State.cardsEditorTags.forEach((tag,i)=>{
+    const chip = document.createElement('span');
+    chip.className='tagChip';
+    chip.textContent = '#'+tag;
+    const rm = document.createElement('button');
+    rm.textContent='✕';
+    rm.title='Remove tag';
+    rm.addEventListener('click', ()=>{
+      State.cardsEditorTags.splice(i,1);
+      renderTagEditor();
+    });
+    chip.appendChild(rm);
+    container.appendChild(chip);
+  });
+}
 
 /* ============================================================
    Wire up engines
@@ -941,6 +1108,21 @@ const conceptsEngine = new Engine(conceptsCanvas, document.getElementById('conce
 
 buildToolbar(document.getElementById('cardsToolbar'), cardsEngine, {allowSelect:false});
 buildToolbar(document.getElementById('conceptsToolbar'), conceptsEngine, {allowSelect:true});
+
+// Extra safety net: if the tab is backgrounded (app switch, incoming call, etc.) mid-stroke,
+// fully reset pointer tracking on both canvases so drawing can never get permanently stuck.
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden) return;
+  [cardsEngine, conceptsEngine].forEach(en=>{
+    en.pointers.clear();
+    en.pinchStart = null;
+    en.isPanning = false; en.panPointerId = null;
+    en.dragMode = null; en.dragPointerId = null;
+    en.drawingStroke = null; en.strokePointerId = null;
+    en.activePenPointerId = null;
+    en.canvas.classList.remove('panning');
+  });
+});
 
 function resizeActiveEngines(){
   cardsEngine.resize();
@@ -970,6 +1152,174 @@ tabConcepts.addEventListener('click', ()=>{
 });
 
 /* ============================================================
+   VAULTS
+============================================================ */
+const vaultPickerEl = document.getElementById('vaultPicker');
+const mainAppEl = document.getElementById('mainApp');
+const vaultGrid = document.getElementById('vaultGrid');
+const vaultCreateBtn = document.getElementById('vaultCreateBtn');
+const vaultSwitchBtn = document.getElementById('vaultSwitchBtn');
+const vaultLabel = document.getElementById('vaultLabel');
+
+async function saveVaultsIndex(){ await storeSet('vaults-index', State.vaultsIndex); }
+
+function renderVaultPicker(){
+  vaultGrid.innerHTML='';
+  if(State.vaultsIndex.length===0){
+    const e=document.createElement('div'); e.className='vpEmpty';
+    e.textContent='No vaults yet — create one below to start drawing.';
+    vaultGrid.appendChild(e);
+    return;
+  }
+  for(const v of State.vaultsIndex){
+    const tile=document.createElement('div');
+    tile.className='vaultTile';
+    tile.innerHTML = `<div class="vMark"></div>
+      <div class="vInfo"><div class="vName"></div><div class="vMeta">Created ${fmtDate(v.createdAt)}</div></div>
+      <div class="vActions">
+        <button class="renameV" title="Rename vault">${ICONS.edit}</button>
+        <button class="deleteV danger" title="Delete vault">${ICONS.clear}</button>
+      </div>`;
+    tile.querySelector('.vMark').textContent = (v.name.trim()[0]||'V').toUpperCase();
+    tile.querySelector('.vName').textContent = v.name;
+    tile.addEventListener('click', ()=>enterVault(v.id));
+    tile.querySelector('.renameV').addEventListener('click', e=>renameVault(v.id,e));
+    tile.querySelector('.deleteV').addEventListener('click', e=>deleteVault(v.id,e));
+    vaultGrid.appendChild(tile);
+  }
+}
+
+function showVaultPicker(){
+  mainAppEl.classList.add('hidden');
+  vaultPickerEl.classList.remove('hidden');
+  renderVaultPicker();
+}
+
+async function enterVault(id){
+  const vault = State.vaultsIndex.find(v=>v.id===id);
+  if(!vault){ toast('Vault not found'); return; }
+  State.currentVaultId = id;
+  vaultLabel.textContent = '— '+vault.name;
+  vaultPickerEl.classList.add('hidden');
+  mainAppEl.classList.remove('hidden');
+
+  await loadVaultData();
+  newCard();
+  newConcept();
+  renderCardsList();
+  renderConceptsList();
+  refreshInsertGrid();
+
+  tabCards.classList.add('active'); tabConcepts.classList.remove('active');
+  cardsView.classList.remove('hidden'); conceptsView.classList.add('hidden');
+  cardsEngine.resize();
+  conceptsEngine.resize();
+}
+
+async function createVault(){
+  const name = prompt('Name your new vault', 'My Vault');
+  if(name===null) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+  const now = Date.now();
+  const vault = {id:uid(), name:trimmed, createdAt:now, updatedAt:now};
+  State.vaultsIndex.unshift(vault);
+  await saveVaultsIndex();
+  await enterVault(vault.id);
+}
+vaultCreateBtn.addEventListener('click', createVault);
+vaultSwitchBtn.addEventListener('click', showVaultPicker);
+
+async function renameVault(id, ev){
+  ev.stopPropagation();
+  const vault = State.vaultsIndex.find(v=>v.id===id);
+  if(!vault) return;
+  const newName = prompt('Rename vault', vault.name);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed) return;
+  vault.name = trimmed;
+  vault.updatedAt = Date.now();
+  await saveVaultsIndex();
+  if(State.currentVaultId===id) vaultLabel.textContent = '— '+trimmed;
+  renderVaultPicker();
+}
+
+async function deleteVault(id, ev){
+  ev.stopPropagation();
+  const vault = State.vaultsIndex.find(v=>v.id===id);
+  if(!vault) return;
+  if(!confirm(`Delete "${vault.name}" and everything inside it — all its cards and concepts? This cannot be undone.`)) return;
+
+  const cardsIdx = (await storeGet('vault:'+id+':cards-index')) || [];
+  for(const c of cardsIdx) await storeDelete('vault:'+id+':card:'+c.id);
+  await storeDelete('vault:'+id+':cards-index');
+
+  const conceptsIdx = (await storeGet('vault:'+id+':concepts-index')) || [];
+  for(const c of conceptsIdx) await storeDelete('vault:'+id+':concept:'+c.id);
+  await storeDelete('vault:'+id+':concepts-index');
+
+  State.vaultsIndex = State.vaultsIndex.filter(v=>v.id!==id);
+  await saveVaultsIndex();
+
+  if(State.currentVaultId===id){
+    State.currentVaultId = null;
+    showVaultPicker();
+  } else {
+    renderVaultPicker();
+  }
+}
+
+/* One-time migration: if this browser/device already has cards or concepts saved from
+   before vaults existed, move them into a new "My Vault" instead of losing them. */
+async function migrateLegacyDataIfNeeded(){
+  const existingVaults = await storeGet('vaults-index');
+  if(existingVaults && existingVaults.length){ State.vaultsIndex = existingVaults; return; }
+
+  const legacyCards = await storeGet('cards-index');
+  const legacyConcepts = await storeGet('concepts-index');
+  if(!legacyCards && !legacyConcepts){ State.vaultsIndex = existingVaults || []; return; }
+
+  const vaultId = uid();
+  const now = Date.now();
+
+  if(legacyCards){
+    const newIndex = [];
+    for(const c of legacyCards){
+      const manifest = await storeGet('card:'+c.id);
+      if(manifest){
+        const lastVer = manifest.versions[manifest.versions.length-1] || {};
+        manifest.name = manifest.name || lastVer.name || c.name || 'Untitled sketch';
+        manifest.tags = manifest.tags || [];
+        await storeSet('vault:'+vaultId+':card:'+c.id, manifest);
+        await storeDelete('card:'+c.id);
+        newIndex.push({...c, name:manifest.name, tags:[]});
+      }
+    }
+    await storeSet('vault:'+vaultId+':cards-index', newIndex);
+    await storeDelete('cards-index');
+  }
+  if(legacyConcepts){
+    const newIndex = [];
+    for(const c of legacyConcepts){
+      const manifest = await storeGet('concept:'+c.id);
+      if(manifest){
+        const lastVer = manifest.versions[manifest.versions.length-1] || {};
+        manifest.name = manifest.name || lastVer.name || c.name || 'Untitled concept';
+        await storeSet('vault:'+vaultId+':concept:'+c.id, manifest);
+        await storeDelete('concept:'+c.id);
+        newIndex.push({...c, name:manifest.name});
+      }
+    }
+    await storeSet('vault:'+vaultId+':concepts-index', newIndex);
+    await storeDelete('concepts-index');
+  }
+
+  State.vaultsIndex = [{id:vaultId, name:'My Vault', createdAt:now, updatedAt:now}];
+  await saveVaultsIndex();
+}
+
+/* ============================================================
    CARDS TAB logic
 ============================================================ */
 const cardsNameInput = document.getElementById('cardsName');
@@ -977,72 +1327,104 @@ const cardsSaveBtn = document.getElementById('cardsSave');
 const cardsNewBtn = document.getElementById('cardsNew');
 const cardsSearch = document.getElementById('cardsSearch');
 const cardsListEl = document.getElementById('cardsList');
+const cardsTagInput = document.getElementById('cardsTagInput');
+
+cardsTagInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter' || e.key===','){
+    e.preventDefault();
+    const tag = normalizeTag(cardsTagInput.value);
+    if(tag && !State.cardsEditorTags.includes(tag)) State.cardsEditorTags.push(tag);
+    cardsTagInput.value='';
+    renderTagEditor();
+  } else if(e.key==='Backspace' && cardsTagInput.value==='' && State.cardsEditorTags.length){
+    State.cardsEditorTags.pop();
+    renderTagEditor();
+  }
+});
 
 function newCard(){
   State.editingCardId = null;
   State.cardManifest = null;
   State.currentCardVersionIndex = -1;
+  State.cardsEditorTags = [];
   cardsEngine.reset();
   cardsNameInput.value='';
+  cardsTagInput.value='';
   cardsSaveBtn.textContent='Add to atlas';
   renderVersionChips('cards');
+  renderTagEditor();
   renderCardsList();
 }
 cardsNewBtn.addEventListener('click', newCard);
 
 async function saveCard(){
-  if(cardsEngine.items.length===0){ toast('Draw something first'); return; }
   const name = cardsNameInput.value.trim() || 'Untitled sketch';
+  const tags = State.cardsEditorTags.slice();
   const items = cloneItemsForStorage(cardsEngine.items);
   const bbox = computeBBox(items);
   const now = Date.now();
 
   let manifest = State.cardManifest && State.cardManifest.id===State.editingCardId ? State.cardManifest : null;
-  if(State.editingCardId && !manifest) manifest = await storeGet('card:'+State.editingCardId);
+  if(State.editingCardId && !manifest) manifest = await storeGet(vaultKey('card:'+State.editingCardId));
 
-  if(manifest){
+  if(!manifest && items.length===0){ toast('Draw something first'); return; }
+
+  const drawingChanged = !manifest || !manifest.versions.length ||
+    JSON.stringify(manifest.versions[manifest.versions.length-1].items) !== JSON.stringify(items);
+  const nameChanged = manifest ? manifest.name!==name : true;
+  const tagsChanged = manifest ? JSON.stringify(manifest.tags||[])!==JSON.stringify(tags) : tags.length>0;
+
+  if(manifest && !drawingChanged && !nameChanged && !tagsChanged){ toast('No changes to save'); return; }
+  if(manifest && items.length===0){ toast('Draw something before saving'); return; }
+
+  let dataURL, w, h;
+  if(drawingChanged){
+    ({dataURL,w,h} = exportThumb(items, bbox, {maxDim:480}));
+  } else {
     const last = manifest.versions[manifest.versions.length-1];
-    if(last && last.name===name && JSON.stringify(last.items)===JSON.stringify(items)){
-      toast('No changes to save');
-      return;
-    }
+    dataURL = last.thumb; w = last.w; h = last.h;
   }
 
-  const {dataURL,w,h} = exportThumb(items, bbox, {maxDim:480});
-  const versionEntry = { v: manifest ? manifest.versions.length+1 : 1, name, items, bbox, thumb:dataURL, w, h, savedAt: now };
-
   if(manifest){
-    manifest.versions.push(versionEntry);
+    if(drawingChanged){
+      manifest.versions.push({ v: manifest.versions.length+1, items, bbox, thumb:dataURL, w, h, savedAt: now });
+    }
+    manifest.name = name;
+    manifest.tags = tags;
     manifest.updatedAt = now;
   } else {
-    manifest = { id: uid(), createdAt: now, updatedAt: now, versions: [versionEntry] };
+    manifest = { id: uid(), name, tags, createdAt: now, updatedAt: now,
+      versions: [{ v:1, items, bbox, thumb:dataURL, w, h, savedAt: now }] };
     State.editingCardId = manifest.id;
   }
 
-  const ok = await storeSet('card:'+manifest.id, manifest);
+  const ok = await storeSet(vaultKey('card:'+manifest.id), manifest);
   if(!ok){ toast('Could not save — try again'); return; }
 
   State.cardManifest = manifest;
   State.currentCardVersionIndex = manifest.versions.length-1;
 
   State.cardsIndex = State.cardsIndex.filter(c=>c.id!==manifest.id);
-  State.cardsIndex.unshift({id:manifest.id,name,thumb:dataURL,w,h,createdAt:manifest.createdAt,updatedAt:now,versionCount:manifest.versions.length});
+  State.cardsIndex.unshift({id:manifest.id,name,tags,thumb:dataURL,w,h,createdAt:manifest.createdAt,updatedAt:now,versionCount:manifest.versions.length});
   await saveCardsIndex();
 
   cardsSaveBtn.textContent='Save changes';
-  toast(manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to atlas');
+  toast(!drawingChanged ? 'Saved changes' : (manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to atlas'));
   renderVersionChips('cards');
   renderCardsList();
 }
 cardsSaveBtn.addEventListener('click', saveCard);
 
 async function openCard(id){
-  const manifest = await storeGet('card:'+id);
+  const manifest = await storeGet(vaultKey('card:'+id));
   if(!manifest){ toast('Could not load card'); return; }
   State.editingCardId = id;
   State.cardManifest = manifest;
+  State.cardsEditorTags = (manifest.tags||[]).slice();
   cardsSaveBtn.textContent='Save changes';
+  cardsNameInput.value = manifest.name;
   loadCardVersion(manifest.versions.length-1);
+  renderTagEditor();
   renderCardsList();
 }
 
@@ -1050,14 +1432,34 @@ function loadCardVersion(idx){
   const ver = State.cardManifest.versions[idx];
   State.currentCardVersionIndex = idx;
   cardsEngine.loadItems(ver.items);
-  cardsNameInput.value = ver.name;
   renderVersionChips('cards');
+}
+
+async function renameCard(id, ev){
+  ev.stopPropagation();
+  const entry = State.cardsIndex.find(c=>c.id===id);
+  const manifest = await storeGet(vaultKey('card:'+id));
+  if(!manifest){ toast('Could not load card'); return; }
+  const newName = prompt('Rename card', manifest.name);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed) return;
+  manifest.name = trimmed;
+  manifest.updatedAt = Date.now();
+  await storeSet(vaultKey('card:'+id), manifest);
+  if(entry){ entry.name = trimmed; entry.updatedAt = manifest.updatedAt; }
+  await saveCardsIndex();
+  if(State.editingCardId===id){
+    cardsNameInput.value = trimmed;
+    if(State.cardManifest) State.cardManifest.name = trimmed;
+  }
+  renderCardsList();
 }
 
 async function deleteCard(id, ev){
   ev.stopPropagation();
   if(!confirm('Delete this card? This cannot be undone.')) return;
-  await storeDelete('card:'+id);
+  await storeDelete(vaultKey('card:'+id));
   State.cardsIndex = State.cardsIndex.filter(c=>c.id!==id);
   await saveCardsIndex();
   if(State.editingCardId===id) newCard();
@@ -1065,8 +1467,8 @@ async function deleteCard(id, ev){
 }
 
 function renderCardsList(){
-  const q = cardsSearch.value.trim().toLowerCase();
-  const items = State.cardsIndex.filter(c=>c.name.toLowerCase().includes(q));
+  const parsed = parseSearchQuery(cardsSearch.value);
+  const items = State.cardsIndex.filter(c=>cardMatchesQuery(c, parsed));
   cardsListEl.innerHTML='';
   if(items.length===0){
     const e=document.createElement('div'); e.className='empty';
@@ -1077,12 +1479,15 @@ function renderCardsList(){
   for(const c of items){
     const tile=document.createElement('div');
     tile.className='cardTile'+(c.id===State.editingCardId?' active':'');
+    const tagsHtml = (c.tags&&c.tags.length) ? `<div class="tileTags">${c.tags.map(t=>`<span class="tileTag">#${t}</span>`).join('')}</div>` : '';
     tile.innerHTML = `<div class="thumb" style="background-image:url('${c.thumb}')"></div>
-      <div class="meta"><div class="n"></div><div class="d">${fmtDate(c.updatedAt)}${c.versionCount>1?' · v'+c.versionCount:''}</div></div>
+      <div class="meta"><div class="n"></div><div class="d">${fmtDate(c.updatedAt)}${c.versionCount>1?' · v'+c.versionCount:''}</div>${tagsHtml}</div>
+      <button class="del rename" title="Rename">✎</button>
       <button class="del" title="Delete">✕</button>`;
     tile.querySelector('.n').textContent = c.name;
     tile.addEventListener('click', ()=>openCard(c.id));
-    tile.querySelector('.del').addEventListener('click', (e)=>deleteCard(c.id,e));
+    tile.querySelector('.rename').addEventListener('click', (e)=>renameCard(c.id,e));
+    tile.querySelector('.del:not(.rename)').addEventListener('click', (e)=>deleteCard(c.id,e));
     cardsListEl.appendChild(tile);
   }
 }
@@ -1112,36 +1517,45 @@ function newConcept(){
 conceptsNewBtn.addEventListener('click', newConcept);
 
 async function saveConcept(){
-  if(conceptsEngine.items.length===0){ toast('Add a card or draw something first'); return; }
   const name = conceptsNameInput.value.trim() || 'Untitled concept';
   const items = cloneItemsForStorage(conceptsEngine.items);
   const bbox = computeBBox(items);
   const now = Date.now();
 
   let manifest = State.conceptManifest && State.conceptManifest.id===State.editingConceptId ? State.conceptManifest : null;
-  if(State.editingConceptId && !manifest) manifest = await storeGet('concept:'+State.editingConceptId);
+  if(State.editingConceptId && !manifest) manifest = await storeGet(vaultKey('concept:'+State.editingConceptId));
 
-  if(manifest){
+  if(!manifest && items.length===0){ toast('Add a card or draw something first'); return; }
+
+  const drawingChanged = !manifest || !manifest.versions.length ||
+    JSON.stringify(manifest.versions[manifest.versions.length-1].items) !== JSON.stringify(items);
+  const nameChanged = manifest ? manifest.name!==name : true;
+
+  if(manifest && !drawingChanged && !nameChanged){ toast('No changes to save'); return; }
+  if(manifest && items.length===0){ toast('Add a card or draw something before saving'); return; }
+
+  let dataURL, w, h;
+  if(drawingChanged){
+    conceptsEngine.ensureImagesLoaded();
+    ({dataURL,w,h} = exportThumb(conceptsEngine.items, bbox, {maxDim:480}));
+  } else {
     const last = manifest.versions[manifest.versions.length-1];
-    if(last && last.name===name && JSON.stringify(last.items)===JSON.stringify(items)){
-      toast('No changes to save');
-      return;
-    }
+    dataURL = last.thumb; w = last.w; h = last.h;
   }
 
-  conceptsEngine.ensureImagesLoaded();
-  const {dataURL,w,h} = exportThumb(conceptsEngine.items, bbox, {maxDim:480});
-  const versionEntry = { v: manifest ? manifest.versions.length+1 : 1, name, items, bbox, thumb:dataURL, w, h, savedAt: now };
-
   if(manifest){
-    manifest.versions.push(versionEntry);
+    if(drawingChanged){
+      manifest.versions.push({ v: manifest.versions.length+1, items, bbox, thumb:dataURL, w, h, savedAt: now });
+    }
+    manifest.name = name;
     manifest.updatedAt = now;
   } else {
-    manifest = { id: uid(), createdAt: now, updatedAt: now, versions: [versionEntry] };
+    manifest = { id: uid(), name, createdAt: now, updatedAt: now,
+      versions: [{ v:1, items, bbox, thumb:dataURL, w, h, savedAt: now }] };
     State.editingConceptId = manifest.id;
   }
 
-  const ok = await storeSet('concept:'+manifest.id, manifest);
+  const ok = await storeSet(vaultKey('concept:'+manifest.id), manifest);
   if(!ok){ toast('Could not save — try again'); return; }
 
   State.conceptManifest = manifest;
@@ -1152,18 +1566,19 @@ async function saveConcept(){
   await saveConceptsIndex();
 
   conceptsSaveBtn.textContent='Save changes';
-  toast(manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to concepts');
+  toast(!drawingChanged ? 'Saved changes' : (manifest.versions.length>1 ? 'Saved as version '+manifest.versions.length : 'Added to concepts'));
   renderVersionChips('concepts');
   renderConceptsList();
 }
 conceptsSaveBtn.addEventListener('click', saveConcept);
 
 async function openConcept(id){
-  const manifest = await storeGet('concept:'+id);
+  const manifest = await storeGet(vaultKey('concept:'+id));
   if(!manifest){ toast('Could not load concept'); return; }
   State.editingConceptId = id;
   State.conceptManifest = manifest;
   conceptsSaveBtn.textContent='Save changes';
+  conceptsNameInput.value = manifest.name;
   loadConceptVersion(manifest.versions.length-1);
   renderConceptsList();
 }
@@ -1172,14 +1587,34 @@ function loadConceptVersion(idx){
   const ver = State.conceptManifest.versions[idx];
   State.currentConceptVersionIndex = idx;
   conceptsEngine.loadItems(ver.items);
-  conceptsNameInput.value = ver.name;
   renderVersionChips('concepts');
+}
+
+async function renameConcept(id, ev){
+  ev.stopPropagation();
+  const entry = State.conceptsIndex.find(c=>c.id===id);
+  const manifest = await storeGet(vaultKey('concept:'+id));
+  if(!manifest){ toast('Could not load concept'); return; }
+  const newName = prompt('Rename concept', manifest.name);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed) return;
+  manifest.name = trimmed;
+  manifest.updatedAt = Date.now();
+  await storeSet(vaultKey('concept:'+id), manifest);
+  if(entry){ entry.name = trimmed; entry.updatedAt = manifest.updatedAt; }
+  await saveConceptsIndex();
+  if(State.editingConceptId===id){
+    conceptsNameInput.value = trimmed;
+    if(State.conceptManifest) State.conceptManifest.name = trimmed;
+  }
+  renderConceptsList();
 }
 
 async function deleteConcept(id, ev){
   ev.stopPropagation();
   if(!confirm('Delete this concept? This cannot be undone.')) return;
-  await storeDelete('concept:'+id);
+  await storeDelete(vaultKey('concept:'+id));
   State.conceptsIndex = State.conceptsIndex.filter(c=>c.id!==id);
   await saveConceptsIndex();
   if(State.editingConceptId===id) newConcept();
@@ -1201,18 +1636,20 @@ function renderConceptsList(){
     tile.className='cardTile'+(c.id===State.editingConceptId?' active':'');
     tile.innerHTML = `<div class="thumb" style="background-image:url('${c.thumb}')"></div>
       <div class="meta"><div class="n"></div><div class="d">${fmtDate(c.updatedAt)}${c.versionCount>1?' · v'+c.versionCount:''}</div></div>
+      <button class="del rename" title="Rename">✎</button>
       <button class="del" title="Delete">✕</button>`;
     tile.querySelector('.n').textContent = c.name;
     tile.addEventListener('click', ()=>openConcept(c.id));
-    tile.querySelector('.del').addEventListener('click', (e)=>deleteConcept(c.id,e));
+    tile.querySelector('.rename').addEventListener('click', (e)=>renameConcept(c.id,e));
+    tile.querySelector('.del:not(.rename)').addEventListener('click', (e)=>deleteConcept(c.id,e));
     conceptsListEl.appendChild(tile);
   }
 }
 conceptsSearch.addEventListener('input', renderConceptsList);
 
 function refreshInsertGrid(){
-  const q = insertSearch.value.trim().toLowerCase();
-  const items = State.cardsIndex.filter(c=>c.name.toLowerCase().includes(q));
+  const parsed = parseSearchQuery(insertSearch.value);
+  const items = State.cardsIndex.filter(c=>cardMatchesQuery(c, parsed));
   insertGrid.innerHTML='';
   if(items.length===0){
     const e=document.createElement('div'); e.className='empty';
@@ -1242,10 +1679,8 @@ insertSearch.addEventListener('input', refreshInsertGrid);
    Boot
 ============================================================ */
 (async function init(){
-  await loadIndexes();
-  renderCardsList();
-  renderConceptsList();
-  refreshInsertGrid();
+  await migrateLegacyDataIfNeeded();
+  showVaultPicker();
 })();
 </script>
 </body>
